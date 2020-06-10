@@ -223,6 +223,21 @@ int main(int argc, char *argv[], char *envp[])
 		return cr_pre_dump_tasks(opts.tree_id) != 0;
 	}
 
+	if (!strcmp(argv[optind], "restore-parallel")) {
+		if (opts.tree_id)
+			pr_warn("Using -t with criu restore is obsoleted\n");
+
+		ret = cr_restore_parallel();
+		if (ret == 0 && opts.exec_cmd) {
+			close_pid_proc();
+			execvp(opts.exec_cmd[0], opts.exec_cmd);
+			pr_perror("Failed to exec command %s", opts.exec_cmd[0]);
+			ret = 1;
+		}
+
+		return ret != 0;
+	}
+
 	if (!strcmp(argv[optind], "restore")) {
 		if (opts.tree_id)
 			pr_warn("Using -t with criu restore is obsoleted\n");
@@ -306,17 +321,18 @@ usage:
 "  criu image-proxy [<options>]\n"
 "\n"
 "Commands:\n"
-"  dump           checkpoint a process/tree identified by pid\n"
-"  pre-dump       pre-dump task(s) minimizing their frozen time\n"
-"  restore        restore a process/tree\n"
-"  check          checks whether the kernel support is up-to-date\n"
-"  page-server    launch page server\n"
-"  service        launch service\n"
-"  dedup          remove duplicates in memory dump\n"
-"  cpuinfo dump   writes cpu information into image file\n"
-"  cpuinfo check  validates cpu information read from image file\n"
-"  image-proxy    launch dump-side proxy to sent images\n"
-"  image-cache    launch restore-side cache to receive images\n"
+"  dump           		checkpoint a process/tree identified by pid\n"
+"  pre-dump       		pre-dump task(s) minimizing their frozen time\n"
+"  restore        		restore a process/tree\n"
+"  restore-parallel		start building process address space since first pre-dump\n"
+"  check          		checks whether the kernel support is up-to-date\n"
+"  page-server    		launch page server\n"
+"  service        		launch service\n"
+"  dedup          		remove duplicates in memory dump\n"
+"  cpuinfo dump   		writes cpu information into image file\n"
+"  cpuinfo check  		validates cpu information read from image file\n"
+"  image-proxy    		launch dump-side proxy to sent images\n"
+"  image-cache    		launch restore-side cache to receive images\n"
 	);
 
 	if (usage_error) {

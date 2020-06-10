@@ -2448,6 +2448,68 @@ int prepare_dummy_task_state(struct pstree_item *pi)
 	return 0;
 }
 
+int cr_restore_parallel(void)
+{
+	int ret = -1;
+
+	if (init_service_fd())
+		return 1;
+
+	if (cr_plugin_init(CR_PLUGIN_STAGE__RESTORE))
+		return -1;
+
+	if (check_img_inventory() < 0)
+		goto err;
+
+	if (init_stats(RESTORE_STATS))
+		goto err;
+
+	if (lsm_check_opts())
+		goto err;
+
+	timing_start(TIME_RESTORE);
+
+	if (cpu_init() < 0)
+		goto err;
+
+	if (vdso_init_restore())
+		goto err;
+
+	if (tty_init_restore())
+		goto err;
+
+	if (opts.cpu_cap & CPU_CAP_IMAGE) {
+		if (cpu_validate_cpuinfo())
+			goto err;
+	}
+
+	if (prepare_task_entries() < 0)
+		goto err;
+
+	if (prepare_pstree() < 0)
+		goto err;
+
+	if (fdstore_init())
+		goto err;
+
+	if (inherit_fd_move_to_fdstore())
+		goto err;
+
+	if (crtools_prepare_shared() < 0)
+		goto err;
+
+	if (criu_signals_setup() < 0)
+		goto err;
+
+	if (prepare_lazy_pages_socket() < 0)
+		goto err;
+
+	ret = restore_root_task(root_item);
+err:
+	cr_plugin_fini(CR_PLUGIN_STAGE__RESTORE, ret);
+	return ret;
+}
+
 int cr_restore_tasks(void)
 {
 	int ret = -1;

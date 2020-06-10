@@ -24,6 +24,7 @@ extern bool deprecated_ok(char *what);
 extern int cr_dump_tasks(pid_t pid);
 extern int cr_pre_dump_tasks(pid_t pid);
 extern int cr_restore_tasks(void);
+extern int cr_restore_parallel(void);
 extern int convert_to_elf(char *elf_path, int fd_core);
 extern int cr_check(void);
 extern int cr_dedup(void);
