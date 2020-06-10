@@ -389,6 +389,13 @@ By default the option is set to *fpu* and *ins*.
     option is intended for post-copy (lazy) migration and should be
     used in conjunction with *restore* with appropriate options.
 
+
+*restore-parallel*
+~~~~~~~~~~~~~~~~~~
+Restore starts with first pre-dump and start building the process address space.
+In deamon form.
+
+
 *restore*
 ~~~~~~~~~
 Restores previously checkpointed processes.
