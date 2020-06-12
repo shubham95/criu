@@ -2171,6 +2171,12 @@ static int restore_root_task(struct pstree_item *init)
 	__restore_switch_stage_nw(CR_STATE_ROOT_TASK);
 
 	ret = fork_with_pid(init);
+
+	//Added by shubham, intensily stopping parent process so that it will not interfer with child
+	//during debugging
+	// while(1){
+	// 	sleep(1);
+	// }
 	if (ret < 0)
 		goto out;
 
