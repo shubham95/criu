@@ -1112,6 +1112,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 				va += len;
 				len >>= PAGE_SHIFT;
 				nr_restored += len;
+				pr_debug("Shubham nr_restored %d :\n",nr_restored);
+
 				i += len - 1;
 				pr_debug("Enqueue page-read\n");
 				continue;

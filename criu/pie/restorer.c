@@ -717,9 +717,9 @@ static unsigned long restore_mapping(VmaEntry *vma_entry)
 	 * that mechanism as it causes the process to be charged for memory
 	 * immediately upon mmap, not later upon preadv().
 	 */
-	pr_debug("\tmmap(%"PRIx64" -> %"PRIx64", %x %x %d)\n",
+	pr_debug("\tmmap(%"PRIx64" -> %"PRIx64", %x %x %d nr_pages: %ld)\n",
 			vma_entry->start, vma_entry->end,
-			prot, flags, (int)vma_entry->fd);
+			prot, flags, (int)vma_entry->fd,(vma_entry->end-vma_entry->start)/4096);
 	/*
 	 * Should map memory here. Note we map them as
 	 * writable since we're going to restore page
@@ -1563,10 +1563,13 @@ long __export_restore_task(struct task_restore_args *args)
 		ssize_t r;
 
 		while (nr) {
-			pr_debug("Preadv %lx:%d... (%d iovs)\n",
+			pr_debug("Shubahm Preadv %lx:%d... (%d iovs)\n",
 					(unsigned long)iovs->iov_base,
 					(int)iovs->iov_len, nr);
 			r = sys_preadv(args->vma_ios_fd, iovs, nr, rio->off);
+			
+			//Added by shubham:
+			pr_debug("Shubham In restorer preadv::: fd : %d, iov_base: %p, iov_len: %ld, nr: %d, off :%ld:   ",args->vma_ios_fd,(iovs->iov_base),iovs->iov_len,nr,rio->off);
 			if (r < 0) {
 				pr_err("Can't read pages data (%d)\n", (int)r);
 				goto core_restore_end;

@@ -1,5 +1,5 @@
 CC	:= gcc
-CFLAGS	?= -O2 -g -Wall -Werror
+CFLAGS	?= -O0 -g -Wall -Werror
 
 COMPEL		:= ../../../compel/compel-host
 

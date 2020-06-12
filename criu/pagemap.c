@@ -742,6 +742,11 @@ static int init_pagemaps(struct page_read *pr)
 		if (ret == 0)
 			break;
 
+
+
+		//Added by shubham ::
+		pr_debug("vaddr : %lx ,nr_pages : %d\n",pr->pmes[pr->nr_pmes]->vaddr,pr->pmes[pr->nr_pmes]->nr_pages);
+
 		init_compat_pagemap_entry(pr->pmes[pr->nr_pmes]);
 
 		pr->nr_pmes++;
