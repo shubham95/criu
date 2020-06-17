@@ -106,6 +106,10 @@ extern int open_page_read(unsigned long id, struct page_read *, int pr_flags);
 extern int open_page_read_at(int dfd, unsigned long id, struct page_read *pr,
 		int pr_flags);
 
+extern int open_page_read_parallel(int dir_fd, unsigned long img_id, struct page_read *pr, int pr_flags);
+extern int open_page_read_parallel_at(int dfd,unsigned long img_id, struct page_read *pr, int pr_flags);
+
+
 struct task_restore_args;
 
 int pagemap_enqueue_iovec(struct page_read *pr, void *buf,

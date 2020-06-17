@@ -836,6 +836,9 @@ void prepare_cow_vmas(void)
 /* Map a private vma, if it is not mapped by a parent yet */
 static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void **tgt_addr)
 {
+	//agruments to function pstree, vmas list, addrress to mmap pointer , address of pr
+	//tgt_addr = is address to mmap address
+
 	int ret;
 	void *addr;
 	unsigned long nr_pages, size;
@@ -974,6 +977,8 @@ static int task_size_check(pid_t pid, VmaEntry *entry)
 static int premap_priv_vmas(struct pstree_item *t, struct vm_area_list *vmas,
 		void **at, struct page_read *pr)
 {
+	//agruments to function pstree, vmas list, addrress to mmap pointer , address of pr
+	//at == address to new mmap area
 	struct vma_area *vma;
 	unsigned long pstart = 0;
 	int ret = 0;
@@ -1013,7 +1018,9 @@ static int premap_priv_vmas(struct pstree_item *t, struct vm_area_list *vmas,
 
 			continue;
 		}
+		return 1;
 
+		//args passed pstree , vma, address to new mmap
 		ret = premap_private_vma(t, vma, at);
 
 		if (ret < 0)
@@ -1170,6 +1177,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 				nr_restored += nr;
 				i += nr - 1;
 
+				pr_debug("Shubham log: In restore_priv vma nr of pages : %d\n",nr);
+
 				bitmap_set(vma->page_bitmap, off + 1, nr - 1);
 			}
 
@@ -1264,25 +1273,33 @@ static int maybe_disable_thp(struct pstree_item *t, struct page_read *pr)
 	return 0;
 }
 
-int prepare_mappings_parallel(int n){
+int prepare_mappings_parallel(int dir_fd, unsigned long process_id){
 	
 	int ret =-1;
-	// struct page_read pr;
+	
+	struct page_read pr;
 
 	//First argument is process pid to be restored with which is just the sake of combatiblitiy.
 
-	// ret = open_page_read_parallel(process_pid, &pr, PR_TASK);
-	// if(ret<=0)return -1;
+	ret = open_page_read_parallel(dir_fd, process_id, &pr, PR_TASK);
+	if(ret<=0)return -1;
 
-	// //Why advance
-	// /*
-	// 	pr->curr_pme++;
-	// 	if (pr->curr_pme >= pr->nr_pmes)
-	// 		return 0;
+	//Why advance
+	/*
+		pr->curr_pme++;
+		if (pr->curr_pme >= pr->nr_pmes)
+			return 0;
 
-	// 	pr->pe = pr->pmes[pr->curr_pme];
-	// 	pr->cvaddr = pr->pe->vaddr;
-	// */
+		pr->pe = pr->pmes[pr->curr_pme];
+		pr->cvaddr = pr->pe->vaddr;
+	*/
+
+
+
+	for(int i=0;i< pr.nr_pmes; i++){
+		pr_debug("shubham Pmes : %p   , nr_of pages %d, flags %d\n",(void *)pr.pmes[i]->vaddr, pr.pmes[i]->nr_pages, pr.pmes[i]->in_parent);
+		 
+	}
 	// pr.advance(&pr); /* shift to the 1st iovec */
 
 
@@ -1294,7 +1311,7 @@ int prepare_mappings_parallel(int n){
 
 	// ret = restore_priv_vma_content(t, &pr);
 	// if (ret < 0)
-	// 	//goto out;
+		//goto out;
 
 
 
@@ -1318,6 +1335,7 @@ int prepare_mappings(struct pstree_item *t)
 		goto out;
 
 	/* Reserve a place for mapping private vma-s one by one */
+	// it gives random address
 	addr = mmap(NULL, vmas->rst_priv_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	if (addr == MAP_FAILED) {
 		ret = -1;
@@ -1340,6 +1358,7 @@ int prepare_mappings(struct pstree_item *t)
 
 	pr.advance(&pr); /* shift to the 1st iovec */
 
+	//agruments to function pstree, vmas list, addrress to mmap pointer , address of pr
 	ret = premap_priv_vmas(t, vmas, &addr, &pr);
 	if (ret < 0)
 		goto out;

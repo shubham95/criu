@@ -986,11 +986,11 @@ int open_page_read_at(int dfd, unsigned long img_id, struct page_read *pr, int p
 	return 1;
 }
 
-int open_page_read_parallel(unsigned long img_id, struct page_read *pr, int pr_flags)
+int open_page_read_parallel(int dir_fd, unsigned long img_id, struct page_read *pr, int pr_flags)
 {
 
 	//Img_id == process pid
-	//return open_page_read_parallel_at(DIrectory fd dena hai yha, img_id, pr, pr_flags);
+	return open_page_read_parallel_at(dir_fd, img_id, pr, pr_flags);
 	return 0;
 }
 
