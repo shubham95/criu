@@ -1563,9 +1563,14 @@ long __export_restore_task(struct task_restore_args *args)
 		ssize_t r;
 
 		while (nr) {
-			pr_debug("Shubahm Preadv %lx:%d... (%d iovs)\n",
+			pr_debug("Shubham Preadv %lx:%d... (%d iovs)\n",
 					(unsigned long)iovs->iov_base,
 					(int)iovs->iov_len, nr);
+
+			//Added by shubham
+			for(int i=0;i<nr;i++){
+				pr_debug("Shubham log i: %d,base %p, nr_page %ld, len %ld Off %ld\n",i,iovs[i].iov_base,iovs[i].iov_len/4096,iovs[i].iov_len,rio->off );
+			}
 			r = sys_preadv(args->vma_ios_fd, iovs, nr, rio->off);
 			
 			//Added by shubham:

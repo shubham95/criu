@@ -1104,6 +1104,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 					BUG();
 				}
 
+				pr_debug("Shubham log: Start addr %p, nr_pages %ld, len %ld\n",(void *)va,len/4096,len);
 				if (pagemap_enqueue_iovec(pr, (void *)va, len, vma_io))
 					return -1;
 
@@ -1122,6 +1123,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			/*
 			 * Otherwise to the COW restore
 			 */
+			pr_debug("Shubham only");
 
 			off = (va - vma->e->start) / PAGE_SIZE;
 			p = decode_pointer((off) * PAGE_SIZE +
@@ -1153,7 +1155,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 				 *
 				 * Within the t pagemap we still have
 				 * nr_pages - i pages (not all, as we might have
-				 * switched VMA above), within the t VMA
+				 * switched VMA above), within			 * PROT_WRITE or not.
+ the t VMA
 				 * we have at most (vma->end - t_addr) bytes.
 				 */
 
@@ -1174,6 +1177,10 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	}
 
 err_read:
+	pr_debug("Shubham log: In err_read after finishing while loop\n");
+	//print vma_io list
+
+
 	if (pr->sync(pr))
 		return -1;
 
@@ -1257,6 +1264,45 @@ static int maybe_disable_thp(struct pstree_item *t, struct page_read *pr)
 	return 0;
 }
 
+int prepare_mappings_parallel(int n){
+	
+	int ret =-1;
+	// struct page_read pr;
+
+	//First argument is process pid to be restored with which is just the sake of combatiblitiy.
+
+	// ret = open_page_read_parallel(process_pid, &pr, PR_TASK);
+	// if(ret<=0)return -1;
+
+	// //Why advance
+	// /*
+	// 	pr->curr_pme++;
+	// 	if (pr->curr_pme >= pr->nr_pmes)
+	// 		return 0;
+
+	// 	pr->pe = pr->pmes[pr->curr_pme];
+	// 	pr->cvaddr = pr->pe->vaddr;
+	// */
+	// pr.advance(&pr); /* shift to the 1st iovec */
+
+
+	// ret = premap_priv_vmas(t, vmas, &addr, &pr);
+	// if (ret < 0)
+	// 	//goto out;
+
+	// pr.reset(&pr);
+
+	// ret = restore_priv_vma_content(t, &pr);
+	// if (ret < 0)
+	// 	//goto out;
+
+
+
+
+	return ret;
+
+}
+
 int prepare_mappings(struct pstree_item *t)
 {
 	int ret = 0;
@@ -1288,6 +1334,7 @@ int prepare_mappings(struct pstree_item *t)
 	if (ret <= 0)
 		return -1;
 
+	//thp = transparent huge pages
 	if (maybe_disable_thp(t, &pr))
 		return -1;
 

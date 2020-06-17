@@ -310,6 +310,7 @@ static int do_open_image(struct cr_img *img, int dfd, int type, unsigned long fl
 
 struct cr_img *open_image_at(int dfd, int type, unsigned long flags, ...)
 {
+	//in this function filling the image struct
 	struct cr_img *img;
 	unsigned long oflags;
 	char path[PATH_MAX];
@@ -327,6 +328,7 @@ struct cr_img *open_image_at(int dfd, int type, unsigned long flags, ...)
 
 	oflags = flags | imgset_template[type].oflags;
 
+	//generating the path with special format supported by criu
 	va_start(args, flags);
 	vsnprintf(path, PATH_MAX, imgset_template[type].fmt, args);
 	va_end(args);

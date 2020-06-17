@@ -254,8 +254,15 @@ static int read_local_page(struct page_read *pr, unsigned long vaddr,
 	 * Flush any pending async requests if any not to break the
 	 * linear reading from the pages.img file.
 	 */
-	if (pr->sync(pr))
+	if (pr->sync(pr)){
+		pr_debug("Shubham log: Return -1 Inside read_local_page\n");
+
 		return -1;
+	}
+
+
+	pr_debug("Shubham log: Inside read_local_page\n");
+
 
 	pr_debug("\tpr%lu-%u Read page from self %lx/%"PRIx64"\n", pr->img_id, pr->id, pr->cvaddr, pr->pi_off);
 	ret = pread(fd, buf, len, pr->pi_off);
@@ -297,6 +304,8 @@ static int enqueue_async_iov(struct page_read *pr, void *buf,
 
 	pr_iov->to = iov;
 	pr_iov->nr = 1;
+
+	pr_debug("Shubham log: enqueue base:%p, len %ld\n",buf,len);
 
 	list_add_tail(&pr_iov->l, to);
 
@@ -344,6 +353,8 @@ int pagemap_enqueue_iovec(struct page_read *pr, void *buf,
 	 * the previous one.
 	 * Start the new preadv request here.
 	 */
+
+	pr_debug("Shubham log: buf ,%p len %ld\n",buf,len);
 	if (!cur_async || pr->pi_off != cur_async->end)
 		return enqueue_async_iov(pr, buf, len, to);
 
@@ -532,14 +543,23 @@ static int process_async_reads(struct page_read *pr)
 	struct page_read_iov *piov, *n;
 
 	fd = img_raw_fd(pr->pi);
+	pr_debug("Shubham log: process_async_reads\n");
 	list_for_each_entry_safe(piov, n, &pr->async, l) {
 		ssize_t ret;
 		off_t start = piov->from;
 		struct iovec *iovs = piov->to;
 
-		pr_debug("Read piov iovs %d, from %ju, len %ju, first %p:%zu\n",
+	pr_debug("Shubham log: In loop process_async_reads\n");
+
+
+		pr_debug(" %d, from %ju, len %ju, first %p:%zu\n",
 				piov->nr, piov->from, piov->end - piov->from,
 				piov->to->iov_base, piov->to->iov_len);
+
+	for(int i=0;i<piov->nr;i++){
+		pr_debug("Shubham log i: %d,base %p, nr_page %ld, len %ld Off %ld\n",i,piov->to[i].iov_base,piov->to[i].iov_len/4096,piov->to[i].iov_len,piov->from );
+
+	}
 more:
 		ret = preadv(fd, piov->to, piov->nr, piov->from);
 		if (fault_injected(FI_PARTIAL_PAGES)) {
@@ -771,6 +791,108 @@ free_pagemaps:
 	return -1;
 }
 
+int open_page_read_parallel_at(int dfd,unsigned long img_id, struct page_read *pr, int pr_flags){
+
+	int flags, i_typ;
+	static unsigned ids = 1;
+	bool remote = pr_flags & PR_REMOTE;
+
+	/*
+	 * Only the top-most page-read can be remote, all the
+	 * others are always local.
+	 */
+	pr_flags &= ~PR_REMOTE;
+	if (opts.auto_dedup)
+		pr_flags |= PR_MOD;
+	if (pr_flags & PR_MOD)
+		flags = O_RDWR;
+	else
+		flags = O_RSTR;
+
+	switch (pr_flags & PR_TYPE_MASK) {
+	case PR_TASK:
+		i_typ = CR_FD_PAGEMAP;
+		break;
+	case PR_SHMEM:
+		i_typ = CR_FD_SHMEM_PAGEMAP;
+		break;
+	default:
+		BUG();
+		return -1;
+	}
+
+	INIT_LIST_HEAD(&pr->async);
+	pr->pe = NULL;
+	pr->parent = NULL;
+	pr->cvaddr = 0;
+	pr->pi_off = 0;
+	pr->bunch.iov_len = 0;
+	pr->bunch.iov_base = NULL;
+	pr->pmes = NULL;
+	pr->pieok = false;
+
+	pr->pmi = open_image_at(dfd, i_typ, O_RSTR, img_id);
+	if (!pr->pmi)
+		return -1;
+
+	if (empty_image(pr->pmi)) {
+		close_image(pr->pmi);
+		return 0;
+	}
+
+	//No need to check parent in this case
+	// if (try_open_parent(dfd, img_id, pr, pr_flags)) {
+	// 	close_image(pr->pmi);
+	// 	return -1;
+	// }
+
+	pr->pi = open_pages_image_at(dfd, flags, pr->pmi, &pr->pages_img_id);
+	//pr->pages_img_id is suffice after pages-1 variable.
+	if (!pr->pi) {
+		close_page_read(pr);
+		return -1;
+	}
+
+
+	//Now we will parse the pagemap file and fill the array of pagemap entry
+	if (init_pagemaps(pr)) {
+		close_page_read(pr);
+		return -1;
+	}
+
+	pr->read_pages = read_pagemap_page;
+	pr->advance = advance;
+	pr->close = close_page_read;
+	pr->skip_pages = skip_pagemap_pages;
+	pr->sync = process_async_reads;
+	pr->seek_pagemap = seek_pagemap;
+	pr->reset = reset_pagemap;
+	pr->io_complete = NULL; /* set up by the client if needed */
+	pr->id = ids++;
+	pr->img_id = img_id;
+
+	if (opts.remote)
+		pr->maybe_read_page = maybe_read_page_img_cache;
+	else if (remote)
+		pr->maybe_read_page = maybe_read_page_remote;
+	else {
+		pr->maybe_read_page = maybe_read_page_local;
+		if (!pr->parent && !opts.lazy_pages){
+			//this condition check if it does not have parent directory and does not 
+			//have lazy pages then the pages will restored in restorer blob
+			pr->pieok = true;
+		}
+	}
+
+	pr_debug("Opened %s page read %u (parent %u)\n",
+		 remote ? "remote" : "local", pr->id,
+		 pr->parent ? pr->parent->id : 0);
+
+	return 1;
+
+
+}
+
 int open_page_read_at(int dfd, unsigned long img_id, struct page_read *pr, int pr_flags)
 {
 	int flags, i_typ;
@@ -864,8 +986,18 @@ int open_page_read_at(int dfd, unsigned long img_id, struct page_read *pr, int p
 	return 1;
 }
 
+int open_page_read_parallel(unsigned long img_id, struct page_read *pr, int pr_flags)
+{
+
+	//Img_id == process pid
+	//return open_page_read_parallel_at(DIrectory fd dena hai yha, img_id, pr, pr_flags);
+	return 0;
+}
+
 int open_page_read(unsigned long img_id, struct page_read *pr, int pr_flags)
 {
+	//img_id == process_pid
+	//first argument id dir fd
 	return open_page_read_at(get_service_fd(IMG_FD_OFF), img_id, pr, pr_flags);
 }
 
