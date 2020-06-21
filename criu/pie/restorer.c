@@ -1537,6 +1537,9 @@ long __export_restore_task(struct task_restore_args *args)
 	for (i = 0; i < args->vmas_n; i++) {
 		vma_entry = args->vmas + i;
 
+		//we are processing single VMA at time
+		pr_debug("PIE : Iter i : %d  Start %p  end %p\n",i,(void *)vma_entry->start,(void *)vma_entry->end);
+
 		if (!vma_entry_is(vma_entry, VMA_AREA_REGULAR) &&
 				!vma_entry_is(vma_entry, VMA_AREA_AIORING))
 			continue;
@@ -1551,6 +1554,8 @@ long __export_restore_task(struct task_restore_args *args)
 			goto core_restore_end;
 		}
 	}
+
+	pr_debug("Succefully restored \n");
 
 	/*
 	 * Now read the contents (if any)

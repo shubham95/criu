@@ -34,6 +34,20 @@
 #include "protobuf.h"
 #include "images/pagemap.pb-c.h"
 
+//Declare global variable for prepare_mapping parrallel
+struct history_pme{
+	
+	/* list of VMAs */
+	void* vaddr;
+	void* end;
+	int nr_pages;
+	int is_valid;
+	struct history_pme *next; 
+};
+struct history_pme *history_pme_head =NULL;
+struct history_pme *history_pme_tail =NULL;
+
+
 static int task_reset_dirty_track(int pid)
 {
 	int ret;
@@ -1038,6 +1052,9 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	int ret = 0;
 	struct list_head *vmas = &rsti(t)->vmas.h;
 	struct list_head *vma_io = &rsti(t)->vma_io;
+	int found =-1;
+
+	struct history_pme *tmp;
 
 	unsigned int nr_restored = 0;
 	unsigned int nr_shared = 0;
@@ -1048,6 +1065,16 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 
 	vma = list_first_entry(vmas, struct vma_area, list);
 	rsti(t)->pages_img_id = pr->pages_img_id;
+
+
+	//printing vma
+	// while (vma) {
+	// 	pr_debug("Shubham Vma start %p, vma end %p\n",(void *)vma->e->start,(void *)vma->e->end);
+	// 	vma = vma_next(vma);
+	// }
+
+	// vma = list_first_entry(vmas, struct vma_area, list);
+
 
 	/*
 	 * Read page contents.
@@ -1062,6 +1089,38 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		va = (unsigned long)decode_pointer(pr->pe->vaddr);
 		nr_pages = pr->pe->nr_pages;
 
+		
+
+
+
+		/*
+		 * skip pages if it present in linked list and nr_pages
+		 * skip minimum of nr_pages and present in list
+		 * 
+		 * ASSUMPTION List is sorted
+		 */
+
+		
+		tmp = history_pme_head;
+
+		found = -1;
+		while(tmp){
+			if(va>=(unsigned long)tmp->vaddr && va<(unsigned long)tmp->end){
+				found =1;
+				break;
+			}
+			tmp = tmp->next;
+		}
+
+		if(found==1){
+			//skip
+			//check if current va needs less pages than we have
+			unsigned long len = min_t(unsigned long,nr_pages*PAGE_SIZE,tmp->nr_pages*PAGE_SIZE);
+			pr_debug("Skiped va : %p , nr : %ld\n",(void*)va,len/PAGE_SIZE);
+			pr->skip_pages(pr,len);
+			continue;
+			
+		}
 		/*
 		 * This means that userfaultfd is used to load the pages
 		 * on demand.
@@ -1100,7 +1159,14 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 				goto err_addr;
 			}
 
+
+			//Solve mystery when/why it goes to VMA_PREMMAPPED
 			if (!vma_area_is(vma, VMA_PREMMAPED)) {
+				
+				//find minimum between two
+				//if total pages left and vma size left
+				// if from va there are consecutive page mapped 1000 and vma is smallso we
+				// will copy only pages till vmas
 				unsigned long len = min_t(unsigned long,
 						(nr_pages - i) * PAGE_SIZE,
 						vma->e->end - va);
@@ -1115,13 +1181,21 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 				if (pagemap_enqueue_iovec(pr, (void *)va, len, vma_io))
 					return -1;
 
+				/*
+					skip pages
+					pr->pi_off +=len;
+					pr->cvaddr +=len;
+				*/
 				pr->skip_pages(pr, len);
 
+				//increment va
 				va += len;
+				//divide len by 4096 to get nr of pages
 				len >>= PAGE_SHIFT;
 				nr_restored += len;
 				pr_debug("Shubham nr_restored %d :\n",nr_restored);
 
+				//incremet nr of pages restored to i
 				i += len - 1;
 				pr_debug("Enqueue page-read\n");
 				continue;
@@ -1133,6 +1207,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			pr_debug("Shubham only");
 
 			off = (va - vma->e->start) / PAGE_SIZE;
+
+			//vma->premmaped_addr is the new mmap address
 			p = decode_pointer((off) * PAGE_SIZE +
 					vma->premmaped_addr);
 
@@ -1169,6 +1245,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 
 				nr = min_t(int, nr_pages - i, (vma->e->end - va) / PAGE_SIZE);
 
+				//putting pages into new mmap location which is present in  p
 				ret = pr->read_pages(pr, va, nr, p, PR_ASYNC);
 				if (ret < 0)
 					goto err_read;
@@ -1273,11 +1350,21 @@ static int maybe_disable_thp(struct pstree_item *t, struct page_read *pr)
 	return 0;
 }
 
+
+
+
 int prepare_mappings_parallel(int dir_fd, unsigned long process_id){
 	
 	int ret =-1;
+	int page_fd =-1;
+	unsigned long off_st=0;
+	//int concide_case = -1;
 	
 	struct page_read pr;
+	struct history_pme *node;
+	struct history_pme *tmp;
+	void *addr = NULL;
+
 
 	//First argument is process pid to be restored with which is just the sake of combatiblitiy.
 
@@ -1297,23 +1384,97 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id){
 
 
 	for(int i=0;i< pr.nr_pmes; i++){
-		pr_debug("shubham Pmes : %p   , nr_of pages %d, flags %d\n",(void *)pr.pmes[i]->vaddr, pr.pmes[i]->nr_pages, pr.pmes[i]->in_parent);
+		pr_debug("shubham Pmes : %p   , nr_of pages %d, has_in_flags %d, has_in_parent\n",(void *)pr.pmes[i]->vaddr, pr.pmes[i]->nr_pages, pr.pmes[i]->flags);
 		 
 	}
-	// pr.advance(&pr); /* shift to the 1st iovec */
 
 
-	// ret = premap_priv_vmas(t, vmas, &addr, &pr);
-	// if (ret < 0)
-	// 	//goto out;
 
-	// pr.reset(&pr);
+	// redaing pages now to criu address space
 
-	// ret = restore_priv_vma_content(t, &pr);
-	// if (ret < 0)
-		//goto out;
+	page_fd = img_raw_fd(pr.pi);
+
+	
+
+	for(int i=0;i<pr.nr_pmes;i++){
+		void* start_addr = (void *)pr.pmes[i]->vaddr;
+		unsigned long size = ((unsigned long)pr.pmes[i]->nr_pages) * PAGE_SIZE;
+		//void* end=NULL;
+		//end = start_addr + size;
+
+		//if mmap is succesfull read pages other wise leave it
+		//PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0
+		
+
+		/*
+			PE_PARENT  1<<0
+			PE_LAZY    1<<1
+			PE_PRESENT 1<<2
+		*/
+
+		if(pr.pmes[i]->flags>=4){
+			//present
 
 
+			//check if start address already in list
+
+			// tmp = head;
+			// while(tmp){
+			// 	if(start_addr <tmp->vaddr && end<=tmp->end && end > tmp->vaddr){
+					
+					
+			// 		concide_case = 1;
+					
+			// 	}
+			// 	tmp = tmp->next;
+			// }
+
+
+
+
+			addr = mmap(start_addr,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0);
+			if(start_addr == addr){
+				// it mapped succefullly fill the pages
+				//fd, buf4k, BUFSIZE, DATA1_OFF
+				size_t ret = pread(page_fd, addr, size, off_st);
+				off_st+=ret;
+
+				pr_debug("start addresss %p | size read %ld\n",addr,ret);
+
+
+				//fill this entry to global history list
+				node = (struct history_pme*)malloc(sizeof(struct history_pme));
+				node->vaddr = (void *)pr.pmes[i]->vaddr;
+				node->nr_pages = pr.pmes[i]->nr_pages;
+				node->end = node->vaddr + (node->nr_pages * PAGE_SIZE);
+				node->is_valid = 1;
+				node->next = NULL;
+				if(history_pme_head ==NULL){
+					history_pme_head = node;
+					history_pme_tail = node;
+				}else{
+					history_pme_tail->next = node;
+					history_pme_tail = node;
+				}
+
+
+			}else{
+				//skip;
+			}
+		}	
+	}
+
+
+	//print linked list{
+
+
+
+	tmp = history_pme_head;
+	while(tmp){
+		pr_debug("shubham printing list start : %p, end :%p   , nr_of pages %d, valid %d\n",(void *)tmp->vaddr,(void*)tmp->end,tmp->nr_pages, tmp->is_valid);
+		tmp=tmp->next;
+	}
+	
 
 
 	return ret;
