@@ -38,6 +38,7 @@
 struct history_pme{
 	
 	/* list of VMAs */
+	void* mapp_addr;
 	void* vaddr;
 	void* end;
 	int nr_pages;
@@ -871,6 +872,9 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 
 	size = vma_entry_len(vma->e);
 	if (!vma_inherited(vma)) {
+		//comes into this if vma is inherited
+		struct history_pme *tmp;
+		int found =0;
 		int flag = 0;
 		/*
 		 * The respective memory area was NOT found in the parent.
@@ -898,15 +902,54 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		 * bits there. Ideally we'd check for the whole COW-chain
 		 * having any data in.
 		 */
-		addr = mmap(*tgt_addr, size,
-				vma->e->prot | PROT_WRITE,
-				vma->e->flags | MAP_FIXED | flag,
-				vma->e->fd, vma->e->pgoff);
 
-		if (addr == MAP_FAILED) {
-			pr_perror("Unable to map ANON_VMA");
-			return -1;
+
+		/*
+		 * If content of vma is already mapped in vma 
+		 * mmremap it cuurent target address
+		 * 
+		 * 		addr = mremap(paddr, size, size,
+		 *		MREMAP_FIXED | MREMAP_MAYMOVE, *tgt_addr);
+		 *		if (addr != *tgt_addr) {
+		 *			pr_perror("Unable to remap a private vma");
+		 *			return -1;
+		 *		}
+		 */
+		
+
+		tmp = history_pme_head;
+		found = -1;
+		while(tmp){
+			if((unsigned long)vma->e->start == (unsigned long)tmp->vaddr && (unsigned long)vma->e->end == (unsigned long)tmp->end && (unsigned long)size == (unsigned long)(tmp->nr_pages * PAGE_SIZE)){
+				found =1;
+				break;
+			}
+			tmp = tmp->next;
 		}
+
+		if(found ==1){
+			// change protection of mmaped vma 
+			//int mprotect(void *addr, size_t len, int prot);
+			mprotect(tmp->mapp_addr,size,vma->e->prot | PROT_WRITE);
+			addr = mremap(tmp->mapp_addr, size, size,MREMAP_FIXED | MREMAP_MAYMOVE, *tgt_addr);
+		 	if (addr != *tgt_addr) {
+		 		pr_perror("Unable to remap a private vma");
+		 		return -1;
+		 	}
+		}
+		else{
+			addr = mmap(*tgt_addr, size,
+					vma->e->prot | PROT_WRITE,
+					vma->e->flags | MAP_FIXED | flag,
+					vma->e->fd, vma->e->pgoff);
+
+			if (addr == MAP_FAILED) {
+				pr_perror("Unable to map ANON_VMA");
+				return -1;
+			}
+		}
+		//skip this if you have done the mremap
+
 	} else {
 		void *paddr;
 
@@ -929,6 +972,10 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		}
 	}
 
+	/*
+	 *status is changed to VMA_PREMMAPED
+	 *Update the vma->premmaped_addr to new addr
+	 */
 	vma->e->status |= VMA_PREMMAPED;
 	vma->premmaped_addr = (unsigned long) addr;
 	pr_debug("\tpremap %#016"PRIx64"-%#016"PRIx64" -> %016lx\n",
@@ -1001,26 +1048,37 @@ static int premap_priv_vmas(struct pstree_item *t, struct vm_area_list *vmas,
 	filemap_ctx_init(true);
 
 	list_for_each_entry(vma, &vmas->h, list) {
+
 		if (task_size_check(vpid(t), vma->e)) {
 			ret = -1;
 			break;
 		}
+
 		if (pstart > vma->e->start) {
 			ret = -1;
 			pr_err("VMA-s are not sorted in the image file\n");
 			break;
 		}
+		//take address of first vma
 		pstart = vma->e->start;
 
+		//i guess if vma is not private dont do any thing
 		if (!vma_area_is_private(vma, kdat.task_size))
 			continue;
 
+
+		//pvma stand for parent for inherited vma
 		if (vma->pvma == NULL && pr->pieok && !vma_force_premap(vma, &vmas->h)) {
 			/*
 			 * VMA in question is not shared with anyone. We'll
 			 * restore it with its contents in restorer.
 			 * Now let's check whether we need to map it with
 			 * PROT_WRITE or not.
+			 */
+
+			/*
+			 * This loop ensures that if pagemap is span on more than one vma
+			 * change the permissions
 			 */
 			do {
 				if (pr->pe->vaddr + pr->pe->nr_pages * PAGE_SIZE <= vma->e->start)
@@ -1032,8 +1090,13 @@ static int premap_priv_vmas(struct pstree_item *t, struct vm_area_list *vmas,
 
 			continue;
 		}
-		return 1;
+		//return 1;
 
+		/*
+		 * This function called when above if block fails that means vma is inherited 
+		 * but in our case we have pieok=false(intensliy) that means it will  not restore 
+		 * in restorer the pages is going to read here in (restore_priv_vma_content)
+		 */
 		//args passed pstree , vma, address to new mmap
 		ret = premap_private_vma(t, vma, at);
 
@@ -1397,7 +1460,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id){
 	
 
 	for(int i=0;i<pr.nr_pmes;i++){
-		void* start_addr = (void *)pr.pmes[i]->vaddr;
+		//void* start_addr = (void *)pr.pmes[i]->vaddr;
 		unsigned long size = ((unsigned long)pr.pmes[i]->nr_pages) * PAGE_SIZE;
 		//void* end=NULL;
 		//end = start_addr + size;
@@ -1431,36 +1494,42 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id){
 
 
 
-
-			addr = mmap(start_addr,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0);
-			if(start_addr == addr){
+			size_t ret=0;
+			addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0);
+			// if(start_addr == addr){
 				// it mapped succefullly fill the pages
 				//fd, buf4k, BUFSIZE, DATA1_OFF
-				size_t ret = pread(page_fd, addr, size, off_st);
-				off_st+=ret;
-
-				pr_debug("start addresss %p | size read %ld\n",addr,ret);
-
-
-				//fill this entry to global history list
-				node = (struct history_pme*)malloc(sizeof(struct history_pme));
-				node->vaddr = (void *)pr.pmes[i]->vaddr;
-				node->nr_pages = pr.pmes[i]->nr_pages;
-				node->end = node->vaddr + (node->nr_pages * PAGE_SIZE);
-				node->is_valid = 1;
-				node->next = NULL;
-				if(history_pme_head ==NULL){
-					history_pme_head = node;
-					history_pme_tail = node;
-				}else{
-					history_pme_tail->next = node;
-					history_pme_tail = node;
-				}
-
-
-			}else{
-				//skip;
+			ret = pread(page_fd, addr, size, off_st);
+			if(size!=ret){
+				pr_debug("Not able to read properly Actual size : %ld, Actual read :%ld\n",size,ret);
+				continue;
 			}
+			//Increasing offset for next pageread
+			off_st+=size;
+
+			pr_debug("start addresss %p | size read %ld\n",addr,ret);
+
+
+			//fill this entry to global history list
+			node = (struct history_pme*)malloc(sizeof(struct history_pme));
+			node->mapp_addr = (void *)addr;
+			node->vaddr     = (void *)pr.pmes[i]->vaddr;
+			node->nr_pages  = pr.pmes[i]->nr_pages;
+			node->end       = node->vaddr + (node->nr_pages * PAGE_SIZE);
+			node->is_valid  = 1;
+			node->next      = NULL;
+			if(history_pme_head ==NULL){
+				history_pme_head = node;
+				history_pme_tail = node;
+			}else{
+				history_pme_tail->next = node;
+				history_pme_tail = node;
+			}
+
+
+			// }else{
+			// 	//skip;
+			// }
 		}	
 	}
 
@@ -1520,12 +1589,15 @@ int prepare_mappings(struct pstree_item *t)
 	pr.advance(&pr); /* shift to the 1st iovec */
 
 	//agruments to function pstree, vmas list, addrress to mmap pointer , address of pr
+	
+	//this functions mmap the vmas with offset 
 	ret = premap_priv_vmas(t, vmas, &addr, &pr);
 	if (ret < 0)
 		goto out;
 
 	pr.reset(&pr);
 
+	//In case pieok == false it will fill the pages in this function
 	ret = restore_priv_vma_content(t, &pr);
 	if (ret < 0)
 		goto out;

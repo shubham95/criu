@@ -543,24 +543,25 @@ static int process_async_reads(struct page_read *pr)
 	struct page_read_iov *piov, *n;
 
 	fd = img_raw_fd(pr->pi);
-	pr_debug("Shubham log: process_async_reads\n");
+	//pr_debug("Shubham log: process_async_reads\n");
 	list_for_each_entry_safe(piov, n, &pr->async, l) {
 		ssize_t ret;
 		off_t start = piov->from;
 		struct iovec *iovs = piov->to;
 
-	pr_debug("Shubham log: In loop process_async_reads\n");
+	//pr_debug("Shubham log: In loop process_async_reads\n");
 
 
 		pr_debug(" %d, from %ju, len %ju, first %p:%zu\n",
 				piov->nr, piov->from, piov->end - piov->from,
 				piov->to->iov_base, piov->to->iov_len);
 
-	for(int i=0;i<piov->nr;i++){
-		pr_debug("Shubham log i: %d,base %p, nr_page %ld, len %ld Off %ld\n",i,piov->to[i].iov_base,piov->to[i].iov_len/4096,piov->to[i].iov_len,piov->from );
 
-	}
 more:
+
+	for(int i=0;i<piov->nr;i++){
+		pr_debug("Shubham func process_async_reads Actual Read happend log i: %d,base %p, nr_page %ld, len %ld Off %ld\n",i,piov->to[i].iov_base,piov->to[i].iov_len/4096,piov->to[i].iov_len,piov->from );
+	}
 		ret = preadv(fd, piov->to, piov->nr, piov->from);
 		if (fault_injected(FI_PARTIAL_PAGES)) {
 			/*
@@ -574,6 +575,7 @@ more:
 			}
 		}
 
+		pr_debug("Ret %ld : end-from %ld\n",ret,piov->end - piov->from);
 		if (ret != piov->end - piov->from) {
 			if (ret < 0) {
 				pr_err("Can't read async pr bytes (%zd / %ju read, %ju off, %d iovs)\n",
@@ -975,8 +977,12 @@ int open_page_read_at(int dfd, unsigned long img_id, struct page_read *pr, int p
 		pr->maybe_read_page = maybe_read_page_remote;
 	else {
 		pr->maybe_read_page = maybe_read_page_local;
-		if (!pr->parent && !opts.lazy_pages)
+		if (!pr->parent && !opts.lazy_pages){
 			pr->pieok = true;
+
+			//Intenstionally setting it to make read not in restorer blob
+			pr->pieok = false;
+		}
 	}
 
 	pr_debug("Opened %s page read %u (parent %u)\n",

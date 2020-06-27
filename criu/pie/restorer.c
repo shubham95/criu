@@ -924,9 +924,15 @@ static int enable_uffd(int uffd, unsigned long addr, unsigned long len)
 	return 0;
 }
 
-
+/*
+ * Remap existing vma to new vmas
+ * Assumptions this vmas are not unmmaped
+ * a
+ */
 static int vma_remap(VmaEntry *vma_entry, int uffd)
 {
+	
+	//vma_premmaped_start vma->shmid
 	unsigned long src = vma_premmaped_start(vma_entry);
 	unsigned long dst = vma_entry->start;
 	unsigned long len = vma_entry_len(vma_entry);
@@ -1158,17 +1164,23 @@ static int unmap_old_vmas(void *premmapped_addr, unsigned long premmapped_len,
 		s1 = bootstrap_len;
 	}
 
+	pr_debug("UNMAP: %p len :%ld\n",(void*)premmapped_addr,premmapped_len);
+
 	ret = sys_munmap(NULL, p1 - NULL);
 	if (ret) {
 		pr_err("Unable to unmap (%p-%p): %d\n", NULL, p1, ret);
 		return -1;
 	}
+	pr_err("Able to unmap (%p-%p): %d\n", NULL, p1, ret);
+
 
 	ret = sys_munmap(p1 + s1, p2 - (p1 + s1));
 	if (ret) {
 		pr_err("Unable to unmap (%p-%p): %d\n", p1 + s1, p2, ret);
 		return -1;
 	}
+	pr_err("Able to unmap (%p-%p): %d\n", p1 + s1, p2, ret);
+
 
 	ret = sys_munmap(p2 + s2, task_size - (unsigned long)(p2 + s2));
 	if (ret) {
@@ -1176,6 +1188,8 @@ static int unmap_old_vmas(void *premmapped_addr, unsigned long premmapped_len,
 				p2 + s2, (void *)task_size, ret);
 		return -1;
 	}
+	pr_err("Able to unmap (%p-%p): %d\n",
+				p2 + s2, (void *)task_size, ret);
 
 	return 0;
 }
@@ -1547,6 +1561,7 @@ long __export_restore_task(struct task_restore_args *args)
 		if (vma_entry_is(vma_entry, VMA_PREMMAPED))
 			continue;
 
+		//Assuming its not reading content
 		va = restore_mapping(vma_entry);
 
 		if (va != vma_entry->start) {
@@ -1574,7 +1589,7 @@ long __export_restore_task(struct task_restore_args *args)
 
 			//Added by shubham
 			for(int i=0;i<nr;i++){
-				pr_debug("Shubham log i: %d,base %p, nr_page %ld, len %ld Off %ld\n",i,iovs[i].iov_base,iovs[i].iov_len/4096,iovs[i].iov_len,rio->off );
+				pr_debug("Shubham log i: %d,base %p, end %p, nr_page %ld, len %ld Off %ld\n",i,iovs[i].iov_base,(void *)((unsigned long)iovs[i].iov_base + iovs[i].iov_len),iovs[i].iov_len/4096,iovs[i].iov_len,rio->off );
 			}
 			r = sys_preadv(args->vma_ios_fd, iovs, nr, rio->off);
 			
