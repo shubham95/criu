@@ -43,6 +43,7 @@ struct history_pme{
 	void* end;
 	int nr_pages;
 	int is_valid;
+	int is_matched;
 	struct history_pme *next; 
 };
 struct history_pme *history_pme_head =NULL;
@@ -928,6 +929,7 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		}
 
 		if(found ==1){
+			pr_debug("Matching found at %p \n",(void *)tmp->vaddr);
 			// change protection of mmaped vma 
 			//int mprotect(void *addr, size_t len, int prot);
 			mprotect(tmp->mapp_addr,size,vma->e->prot | PROT_WRITE);
@@ -936,6 +938,7 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		 		pr_perror("Unable to remap a private vma");
 		 		return -1;
 		 	}
+			tmp->is_matched = 1;
 		}
 		else{
 			addr = mmap(*tgt_addr, size,
@@ -1153,37 +1156,28 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		nr_pages = pr->pe->nr_pages;
 
 		
-
-
-
-		/*
-		 * skip pages if it present in linked list and nr_pages
-		 * skip minimum of nr_pages and present in list
-		 * 
-		 * ASSUMPTION List is sorted
+		/* 
+		 * Here some of vmas are already filled with pages we have to skip that
+		 * the vma start address should be matched with pagemap addr because our 
+		 * vma are made from pagemap 
+		 * There is flag is_matched in our history list 
 		 */
-
-		
 		tmp = history_pme_head;
-
 		found = -1;
 		while(tmp){
-			if(va>=(unsigned long)tmp->vaddr && va<(unsigned long)tmp->end){
+			if((tmp->is_matched ==1) && (unsigned long)va == (unsigned long)tmp->vaddr && nr_pages == tmp->nr_pages ){
 				found =1;
 				break;
 			}
 			tmp = tmp->next;
 		}
 
-		if(found==1){
-			//skip
-			//check if current va needs less pages than we have
-			unsigned long len = min_t(unsigned long,nr_pages*PAGE_SIZE,tmp->nr_pages*PAGE_SIZE);
-			pr_debug("Skiped va : %p , nr : %ld\n",(void*)va,len/PAGE_SIZE);
-			pr->skip_pages(pr,len);
+		if(found == 1){
+			pr_debug("Skip of page read : Addr %p nr_pages %ld\n",(void*)va,nr_pages);
+			pr->skip_pages(pr,nr_pages*PAGE_SIZE);
 			continue;
-			
 		}
+
 		/*
 		 * This means that userfaultfd is used to load the pages
 		 * on demand.
@@ -1512,12 +1506,14 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id){
 
 			//fill this entry to global history list
 			node = (struct history_pme*)malloc(sizeof(struct history_pme));
-			node->mapp_addr = (void *)addr;
-			node->vaddr     = (void *)pr.pmes[i]->vaddr;
-			node->nr_pages  = pr.pmes[i]->nr_pages;
-			node->end       = node->vaddr + (node->nr_pages * PAGE_SIZE);
-			node->is_valid  = 1;
-			node->next      = NULL;
+			node->mapp_addr  = (void *)addr;
+			node->vaddr      = (void *)pr.pmes[i]->vaddr;
+			node->nr_pages   = pr.pmes[i]->nr_pages;
+			node->end        = node->vaddr + (node->nr_pages * PAGE_SIZE);
+			node->is_valid   = 1;
+			node->is_matched = -1;
+			node->next       = NULL;
+
 			if(history_pme_head ==NULL){
 				history_pme_head = node;
 				history_pme_tail = node;
