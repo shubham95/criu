@@ -2463,14 +2463,15 @@ int prepare_dummy_task_state(struct pstree_item *pi)
 int cr_restore_parallel(void)
 {
 	//int ret = -1;
-	int dir_fd = -1;
+	int dir_fd  = -1;
+	int dump_no =  1;
 	unsigned long process_id=0;
 	//int pmi_fd = -1;
 	//Run deamon which kept waiting for new directory in current directory
 	char path[50];
 
 	while(1){
-		printf("Enter directory path of 1st pre-dump:\n");
+		printf("Enter directory path of pre-dump nr %d:\n",dump_no++);
 		scanf("%s",path);
 		printf("%s\n",path);
 		printf("Enter pid: this used in file reading\n");
@@ -2485,7 +2486,7 @@ int cr_restore_parallel(void)
 		dir_fd = open(path,O_RDONLY);
 
 		
-		prepare_mappings_parallel(dir_fd,process_id);
+		prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
 	}
 
 
