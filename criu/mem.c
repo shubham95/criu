@@ -1508,7 +1508,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 				node->mapp_addr  = (void *)addr;
 				node->vaddr      = (void *)pr.pmes[i]->vaddr;
 				node->nr_pages   = pr.pmes[i]->nr_pages;
-				node->end        = node->vaddr + (node->nr_pages * PAGE_SIZE);
+				node->end        = (void *)((unsigned long)node->vaddr + (node->nr_pages * PAGE_SIZE));
 				node->is_valid   = 1;
 				node->is_matched = -1;
 				node->next       = NULL;
@@ -1530,6 +1530,9 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 				int new_entry;
 				new_entry = -1;
 				end = (pr.pmes[i]->nr_pages*PAGE_SIZE + pr.pmes[i]->vaddr);
+
+				pr_debug("Else 2nd pre-dump \n\n\n");
+
 				while(tmp){
 
 					//case a : see cases info in above comment
@@ -1548,6 +1551,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 
 						 if(ret != size){
 							 tmp->is_valid = 0;
+							 pr_debug("\n\n\nCase A is valid 0\n\n\n");
 							 break;
 						 }
 						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
@@ -1556,7 +1560,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 break;
 					 }
 					//case b 
- 					if((tmp->is_valid==1) && pr.pmes[i]->vaddr < (unsigned long)tmp->vaddr && end <= (unsigned long)tmp->end){
+ 					if((tmp->is_valid==1) && pr.pmes[i]->vaddr < (unsigned long)tmp->vaddr && end > (unsigned long)tmp->vaddr && end <= (unsigned long)tmp->end){
 						 
 						 unsigned long size,ret,addr_off_st;
 						 pr_debug("CASE: B \n");
@@ -1568,6 +1572,8 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 ret = pread(page_fd,(void *)tmp->mapp_addr,size,off_st);
 						 if(ret != size){
 							 tmp->is_valid = 0;
+							 pr_debug("\n\n\nCase B is valid 0\n\n\n");
+
 							 off_st-=addr_off_st;
 							 continue;
 						 }
@@ -1578,13 +1584,15 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 new_entry     = 1;
 					 }
 					//case c 
- 					if((tmp->is_valid==1) && pr.pmes[i]->vaddr >= (unsigned long)tmp->vaddr && end > (unsigned long)tmp->end){
+ 					if((tmp->is_valid==1) && pr.pmes[i]->vaddr >= (unsigned long)tmp->vaddr &&pr.pmes[i]->vaddr < (unsigned long)tmp->end && end > (unsigned long)tmp->end){
  						 
 						 unsigned long size,ret,addr_off_st,read_start;
 						 pr_debug("CASE: C \n");
 						 addr_off_st = 0;
 						 //have to take care of mmaped address
 						 addr_off_st = pr.pmes[i]->vaddr - (unsigned long)tmp->vaddr;
+						 size = pr.pmes[i]->vaddr - (unsigned long)tmp->end;
+						 pr_debug("\n\n\n Size Reverse %ld lpme-> start %p cpme->start %p lpme->end %p cpme->end %p \n\n\n",size,tmp->vaddr,(void *)pr.pmes[i]->vaddr,tmp->end,(void *)end);
 						 size = (unsigned long)tmp->end - pr.pmes[i]->vaddr;
 						 read_start = (unsigned long)tmp->mapp_addr + addr_off_st;
 
@@ -1592,11 +1600,13 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 
 						 if(ret != size){
 							 tmp->is_valid = 0;
+							 pr_debug("\n\n\nCase C is valid 0\n\n\n");
+
 							 //reset the offset if not read properly
 							 //off_st-=ret;
 							// break;
 						 }
-						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,size/4096);
+						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
 						 new_entry     = 1;
 					 }
 
