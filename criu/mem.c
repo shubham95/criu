@@ -41,7 +41,7 @@ struct history_pme{
 	void* mapp_addr;
 	void* vaddr;
 	void* end;
-	int nr_pages;
+	unsigned long nr_pages;
 	int is_valid;
 	int is_matched;
 	struct history_pme *next; 
@@ -921,7 +921,7 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		tmp = history_pme_head;
 		found = -1;
 		while(tmp){
-			if((unsigned long)vma->e->start == (unsigned long)tmp->vaddr && (unsigned long)vma->e->end == (unsigned long)tmp->end && (unsigned long)size == (unsigned long)(tmp->nr_pages * PAGE_SIZE)){
+			if((tmp->is_valid == 1) && (unsigned long)vma->e->start == (unsigned long)tmp->vaddr && (unsigned long)vma->e->end == (unsigned long)tmp->end && (unsigned long)size == (unsigned long)(tmp->nr_pages * PAGE_SIZE)){
 				found =1;
 				break;
 			}
@@ -938,7 +938,8 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		 		pr_perror("Unable to remap a private vma");
 		 		return -1;
 		 	}
-			tmp->is_matched = 1;
+			tmp->is_matched   = 1;
+			vma->e->is_filled = 1;
 		}
 		else{
 			addr = mmap(*tgt_addr, size,
@@ -1155,6 +1156,13 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		va = (unsigned long)decode_pointer(pr->pe->vaddr);
 		nr_pages = pr->pe->nr_pages;
 
+
+		/*
+		 * New approach to skip vmas filling there is a flag in vmas is_filled
+		 * if is_filled ==1 that mean we have alreaty filled that pages to skip that vma
+		 * 
+		 */
+
 		
 		/* 
 		 * Here some of vmas are already filled with pages we have to skip that
@@ -1165,7 +1173,11 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		tmp = history_pme_head;
 		found = -1;
 		while(tmp){
-			if((tmp->is_matched == 1)&&(1) && (unsigned long)va == (unsigned long)tmp->vaddr && nr_pages == tmp->nr_pages ){
+
+			if(tmp->is_matched ==1){
+				pr_debug("\n\n\n  va %p  tmp->vaddr %p pages %ld  %ld\n\n\n",(void *)va,tmp->vaddr,nr_pages,tmp->nr_pages );
+			}
+			if((tmp->is_matched == 1)&&(tmp->is_valid == 1) && (unsigned long)va == (unsigned long)tmp->vaddr && nr_pages == tmp->nr_pages ){
 				found =1;
 				break;
 			}
@@ -1217,6 +1229,28 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			}
 
 
+			/*
+			 *
+			 * Skipping whole vma
+			 */
+			if(vma->e->is_filled == 1){
+				unsigned long vma_nr_pages;
+				vma_nr_pages = 0;
+				vma_nr_pages = (vma->e->end - vma->e->start)/PAGE_SIZE;
+
+
+				pr_debug("Whether vma is filled or not start %p and end %p is_filled %d   va_nr %ld  vma_nr %ld\n\n",(void *)vma->e->start,(void *)vma->e->end,vma->e->is_filled,nr_pages,vma_nr_pages);		
+
+				if(nr_pages < vma_nr_pages){
+					pr->skip_pages(pr,nr_pages*PAGE_SIZE);
+				}
+				else{
+					pr->skip_pages(pr,vma_nr_pages * PAGE_SIZE);
+				}
+				i+=nr_pages;
+				continue;
+
+			}
 			//Solve mystery when/why it goes to VMA_PREMMAPPED
 			if (!vma_area_is(vma, VMA_PREMMAPED)) {
 				
@@ -1632,7 +1666,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 
 	tmp = history_pme_head;
 	while(tmp){
-		pr_debug("shubham printing list start : %p, end :%p   , nr_of pages %d, valid %d\n",(void *)tmp->vaddr,(void*)tmp->end,tmp->nr_pages, tmp->is_valid);
+		pr_debug("shubham printing list start : %p, end :%p   , nr_of pages %ld, valid %d\n",(void *)tmp->vaddr,(void*)tmp->end,tmp->nr_pages, tmp->is_valid);
 		tmp=tmp->next;
 	}
 	

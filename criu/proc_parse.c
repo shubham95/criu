@@ -797,6 +797,11 @@ int parse_smaps(pid_t pid, struct vm_area_list *vma_area_list,
 		vma_area->e->pgoff	= pgoff;
 		vma_area->e->prot	= PROT_NONE;
 
+		/*
+		 * setting is_filled flag to zero
+		 */
+		vma_area->e->is_filled = 0;
+
 		if (task_size_check(pid, vma_area->e))
 			goto err;
 
