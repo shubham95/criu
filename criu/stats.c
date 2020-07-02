@@ -143,6 +143,8 @@ static void display_stats(int what, StatsEntry *stats)
 		if (stats->restore->has_pages_restored)
 			pr_msg("Pages restored: %" PRIu64 " (0x%" PRIx64 ")\n", stats->restore->pages_restored,
 					stats->restore->pages_restored);
+		pr_msg("Pages skipped pre_filled: %" PRIu64 " (0x%" PRIx64 ")\n", stats->restore->pages_skipped_pre_filled,
+				stats->restore->pages_skipped_pre_filled);
 		pr_msg("Restore time: %d us\n", stats->restore->restore_time);
 		pr_msg("Forking time: %d us\n", stats->restore->forking_time);
 	} else
@@ -192,6 +194,7 @@ void write_stats(int what)
 		rs_entry.pages_skipped_cow = atomic_read(&rstats->counts[CNT_PAGES_SKIPPED_COW]);
 		rs_entry.has_pages_restored = true;
 		rs_entry.pages_restored = atomic_read(&rstats->counts[CNT_PAGES_RESTORED]);
+		rs_entry.pages_skipped_pre_filled = atomic_read(&rstats->counts[CNT_PAGES_PRE_FILLED]);
 
 		encode_time(TIME_FORK, &rs_entry.forking_time);
 		encode_time(TIME_RESTORE, &rs_entry.restore_time);

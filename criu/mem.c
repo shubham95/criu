@@ -1119,15 +1119,15 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	int ret = 0;
 	struct list_head *vmas = &rsti(t)->vmas.h;
 	struct list_head *vma_io = &rsti(t)->vma_io;
-	int found =-1;
 
-	struct history_pme *tmp;
+	//struct history_pme *tmp;
 
 	unsigned int nr_restored = 0;
 	unsigned int nr_shared = 0;
 	unsigned int nr_dropped = 0;
 	unsigned int nr_compared = 0;
 	unsigned int nr_lazy = 0;
+	unsigned int nr_skip_is_filled = 0;
 	unsigned long va;
 
 	vma = list_first_entry(vmas, struct vma_area, list);
@@ -1170,25 +1170,25 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		 * vma are made from pagemap 
 		 * There is flag is_matched in our history list 
 		 */
-		tmp = history_pme_head;
-		found = -1;
-		while(tmp){
+		// tmp = history_pme_head;
+		// found = -1;
+		// while(tmp){
 
-			if(tmp->is_matched ==1){
-				pr_debug("\n\n\n  va %p  tmp->vaddr %p pages %ld  %ld\n\n\n",(void *)va,tmp->vaddr,nr_pages,tmp->nr_pages );
-			}
-			if((tmp->is_matched == 1)&&(tmp->is_valid == 1) && (unsigned long)va == (unsigned long)tmp->vaddr && nr_pages == tmp->nr_pages ){
-				found =1;
-				break;
-			}
-			tmp = tmp->next;
-		}
+		// 	if(tmp->is_matched ==1){
+		// 		pr_debug("\n\n\n  va %p  tmp->vaddr %p pages %ld  %ld\n\n\n",(void *)va,tmp->vaddr,nr_pages,tmp->nr_pages );
+		// 	}
+		// 	if((tmp->is_matched == 1)&&(tmp->is_valid == 1) && (unsigned long)va == (unsigned long)tmp->vaddr && nr_pages == tmp->nr_pages ){
+		// 		found =1;
+		// 		break;
+		// 	}
+		// 	tmp = tmp->next;
+		// }
 
-		if(found == 1){
-			pr_debug("Skip of page read : Addr %p nr_pages %ld\n",(void*)va,nr_pages);
-			pr->skip_pages(pr,nr_pages*PAGE_SIZE);
-			continue;
-		}
+		// if(found == 1){
+		// 	pr_debug("Skip of page read : Addr %p nr_pages %ld\n",(void*)va,nr_pages);
+		// 	pr->skip_pages(pr,nr_pages*PAGE_SIZE);
+		// 	continue;
+		// }
 
 		/*
 		 * This means that userfaultfd is used to load the pages
@@ -1241,12 +1241,17 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 
 				pr_debug("Whether vma is filled or not start %p and end %p is_filled %d   va_nr %ld  vma_nr %ld\n\n",(void *)vma->e->start,(void *)vma->e->end,vma->e->is_filled,nr_pages,vma_nr_pages);		
 
-				if(nr_pages < vma_nr_pages){
-					pr->skip_pages(pr,nr_pages*PAGE_SIZE);
-				}
-				else{
-					pr->skip_pages(pr,vma_nr_pages * PAGE_SIZE);
-				}
+				/*
+				 * This should work because our vma in this case is completely full 
+				 */
+				// if(nr_pages < vma_nr_pages){
+				// 	pr->skip_pages(pr,nr_pages*PAGE_SIZE);
+				// }
+				// else{
+				// 	pr->skip_pages(pr,vma_nr_pages * PAGE_SIZE);
+				// }
+				pr->skip_pages(pr,nr_pages*PAGE_SIZE);
+				nr_skip_is_filled += nr_pages;
 				i+=nr_pages;
 				continue;
 
@@ -1395,11 +1400,13 @@ err_read:
 	cnt_add(CNT_PAGES_COMPARED, nr_compared);
 	cnt_add(CNT_PAGES_SKIPPED_COW, nr_shared);
 	cnt_add(CNT_PAGES_RESTORED, nr_restored);
+	cnt_add(CNT_PAGES_PRE_FILLED, nr_skip_is_filled);
 
 	pr_info("nr_restored_pages: %d\n", nr_restored);
 	pr_info("nr_shared_pages:   %d\n", nr_shared);
 	pr_info("nr_dropped_pages:   %d\n", nr_dropped);
 	pr_info("nr_lazy:           %d\n", nr_lazy);
+	pr_info("nr_pages_skip_isfilled %d\n",nr_skip_is_filled);
 
 	return 0;
 
