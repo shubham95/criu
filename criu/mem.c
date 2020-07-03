@@ -929,7 +929,7 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		}
 
 		if(found ==1){
-			pr_debug("Matching found at %p \n",(void *)tmp->vaddr);
+			pr_debug("Matching found at %p  nr_pages %ld \n",(void *)tmp->vaddr,size/PAGE_SIZE);
 			// change protection of mmaped vma 
 			//int mprotect(void *addr, size_t len, int prot);
 			mprotect(tmp->mapp_addr,size,vma->e->prot | PROT_WRITE);
