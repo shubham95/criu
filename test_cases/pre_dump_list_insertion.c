@@ -60,18 +60,33 @@ void print_list(){
 
 int main(void){
 
-    uint64_t nr_nodes=0,t;
+    uint64_t nr_nodes=0,pre_dump,t;
     printf("Enter Nr of list you want to insert..\n");
     scanf("%ld",&nr_nodes);
 
-    for(uint64_t i =1; i<=nr_nodes; i++){
-        insert_node(i);
+
+    printf("Enter Nr pre-dumps you want to take..\n");
+    scanf("%ld",&pre_dump);
+
+
+    uint64_t i =1;
+    for(int j=1;j<=pre_dump;j++){
+
+        uint64_t cnt = 0;
+        for(; i<=nr_nodes; i++){
+           // printf("%ld\n",i);
+            insert_node(i);
+            cnt++;
+            if(cnt == nr_nodes/pre_dump){
+                i++;
+                break;
+            }
+        }
+
+        printf("Insertion completed till %ld please take dump nr %d...\n",i,j);
+        printf("Process ID : %d\nEnter some integer to continue\n",getpid());
+        scanf("%ld",&t);        
     }
-
-    printf("Insertion completed  please take dump...\n");
-    printf("Process ID : %d\nEnter some integer to continue\n",getpid());
-    scanf("%ld",&t);
-
 
 
     /*

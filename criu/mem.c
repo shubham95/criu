@@ -732,7 +732,7 @@ int prepare_mm_pid(struct pstree_item *i)
 				ri->vmas.rst_priv_size += PAGE_SIZE;
 		}
 
-		pr_info("vma 0x%"PRIx64" 0x%"PRIx64"\n", vma->e->start, vma->e->end);
+		pr_info("vma 0x%"PRIx64" 0x%"PRIx64"  nr_pages %ld \n", vma->e->start, vma->e->end,(vma->e->end - vma->e->start)/PAGE_SIZE);
 
 		if (vma_area_is(vma, VMA_ANON_SHARED))
 			ret = collect_shmem(pid, vma);
