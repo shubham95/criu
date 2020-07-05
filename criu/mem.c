@@ -34,6 +34,14 @@
 #include "protobuf.h"
 #include "images/pagemap.pb-c.h"
 
+struct pme_list{
+	uint64_t start;
+	uint64_t end;
+	struct pme_list *next;
+};
+struct pme_list *pme_list_head = NULL;
+struct pme_list *pme_list_tail = NULL;
+
 //Declare global variable for prepare_mapping parrallel
 struct history_pme{
 	
@@ -1448,8 +1456,36 @@ static int maybe_disable_thp(struct pstree_item *t, struct page_read *pr)
 	return 0;
 }
 
+int merge_pme_list(struct pme_list *head){
+	struct pme_list *A ,*B;
+	A = head;
+	if(A==NULL)return 0;
+	B = A->next;
+	if(B==NULL)return 0;
 
 
+	while(A!=NULL && B!=NULL){
+		if(A->end == B->start){
+			A->end = B->end;
+			A->next = B->next;
+			free(B);
+			return 1;
+		}else{
+			A =B;
+			B =B->next;
+		}
+	}
+	return 0;
+}
+
+void print_pme_list(struct pme_list *head){
+	struct pme_list *tmp = head;
+
+	while(tmp){
+		pr_debug("Printing Merged list : start %ld  end %ld\n",tmp->start, tmp->end);
+		tmp = tmp->next;
+	}
+}
 
 int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no){
 	
@@ -1479,18 +1515,37 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 		pr->cvaddr = pr->pe->vaddr;
 	*/
 
-	for(int i=0;i< pr.nr_pmes; i++){
+	/*
+	 * Copy the content of pmes array to global array So that we can 
+	 * merge the consequetive mmappings into one
+	 */
+
+
+	for(int i=0;i< pr.nr_pmes; i++){				
+		struct pme_list *node = (struct pme_list*)malloc(sizeof(struct pme_list));
+		node->start = pr.pmes[i]->vaddr;
+		node->end   = pr.pmes[i]->vaddr + (pr.pmes[i]->nr_pages * PAGE_SIZE);
+
+		if(pme_list_head == NULL){
+			pme_list_head = node;
+			pme_list_tail = node;
+		}else{
+			pme_list_tail->next = node;
+			pme_list_tail = node;
+		}
 		pr_debug("shubham Pmes : %p   , nr_of pages %d, has_in_flags %d, has_in_parent\n",(void *)pr.pmes[i]->vaddr, pr.pmes[i]->nr_pages, pr.pmes[i]->flags);
-		 
+
+
 	}
 
-
+	while(merge_pme_list(pme_list_head)){
+		print_pme_list(pme_list_head);
+	}
 
 	// redaing pages now to criu address space
 
 	page_fd = img_raw_fd(pr.pi);
 
-	
 
 	for(int i=0;i<pr.nr_pmes;i++){
 
