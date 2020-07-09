@@ -933,6 +933,33 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 				found =1;
 				break;
 			}
+			else if((tmp->is_valid == 1) && (unsigned long)vma->e->start == (unsigned long)tmp->vaddr && (unsigned long)vma->e->end > (unsigned long)tmp->end){
+				/*
+				 *
+				 * original vma |++++++++++++++++++++++|
+				 * Customm  vma |+++++++++++++++|
+				 * 
+				 * AFter  remap |+++++++++++++++-------|
+				 * 
+				 */
+				unsigned long old_size,new_size;
+				old_size = (unsigned long)tmp->end - (unsigned long)tmp->vaddr;
+				new_size = (unsigned long)vma->e->end - (unsigned long)vma->e->start;
+
+				
+
+				mremap(tmp->mapp_addr,old_size,new_size,0);
+				tmp->end = (void *)((unsigned long)tmp->vaddr + (unsigned long)new_size);
+				tmp->nr_pages = new_size /PAGE_SIZE;
+
+				pr_debug("\n\n\n been there  new start %p new end %p \n\n\n",tmp->vaddr,tmp->end);
+				found =1;
+				break;
+
+			}
+			// else if(){
+
+			// }
 			tmp = tmp->next;
 		}
 
@@ -1463,7 +1490,6 @@ int merge_pme_list(struct pme_list *head){
 	B = A->next;
 	if(B==NULL)return 0;
 
-
 	while(A!=NULL && B!=NULL){
 		if(A->end == B->start){
 			A->end = B->end;
@@ -1482,7 +1508,7 @@ void print_pme_list(struct pme_list *head){
 	struct pme_list *tmp = head;
 
 	while(tmp){
-		pr_debug("Printing Merged list : start %ld  end %ld\n",tmp->start, tmp->end);
+		pr_debug("Printing Merged list : start %p  end %p nr_pages %ld\n",(void *)tmp->start, (void *)tmp->end, (tmp->end -tmp->start)/4096);
 		tmp = tmp->next;
 	}
 }
@@ -1497,6 +1523,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 	struct page_read pr;
 	struct history_pme *node;
 	struct history_pme *tmp;
+	struct pme_list *pme_tmp_list;
 	void *addr = NULL;
 
 
@@ -1540,186 +1567,228 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 
 	while(merge_pme_list(pme_list_head)){
 		print_pme_list(pme_list_head);
+		pr_debug("\n\n\n");
 	}
 
 	// redaing pages now to criu address space
 
 	page_fd = img_raw_fd(pr.pi);
 
-
-	for(int i=0;i<pr.nr_pmes;i++){
-
-		unsigned long size = ((unsigned long)pr.pmes[i]->nr_pages) * PAGE_SIZE;
-		/*
-			PE_PARENT  1<<0
-			PE_LAZY    1<<1
-			PE_PRESENT 1<<2
-		*/
-
-		if(pr.pmes[i]->flags>=4){
-			//present
-
-
-			/*
-			 * For consecutive pre dump we have to make x vmas data valid like if uptdate happend
-			 * in consecutive predump we have to keep overwrite the vma content.
-			 * and if there is new entry in pagemap we have to add new vma to the list of x vmas
-			 * there can be four case of overlap that we have to handle to make vma data valid
-			 * 
-			 *  case 1:
-			 *  |+++++++++old+++++++++|
-			 * 		|------new----|
-			 * 
-			 *  case 2:
-			 *  		|+++++++++old+++++++|
-			 *  |-------new------|
-			 * 
-			 *  case 3:
-			 * 	|+++++++++old++++++++|
-			 *               |---------new-------|
-			 *  
-			 *  case 4:
-			 *  |--------new-------| 
-			 * 	
-			 * 
-			 */
-
-
-			if(dump_no == 1){
-				size_t ret=0;
-				addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0);
-				ret = pread(page_fd, addr, size, off_st);
-				if(size!=ret){
-					pr_debug("Not able to read properly Actual size : %ld, Actual read :%ld\n",size,ret);
-					continue;
+	pme_tmp_list = pme_list_head;
+	while(pme_tmp_list){
+		
+		size_t ret,size;
+		ret  = 0;
+		size = pme_tmp_list->end - pme_tmp_list->start;
+		addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0);
+		ret = pread(page_fd, addr, size, off_st);
+		if(size!=ret){
+			pr_debug("Not able to read properly Actual size : %ld, Actual read :%ld\n",size,ret);
+			off_st+=size;
+			continue;
 					//skipping this read
-				}
-				//Increasing offset for next pageread
-				off_st+=size;
-				pr_debug("start addresss %p | size read %ld\n",addr,ret);
+		}
+		//Increasing offset for next pageread
+		off_st+=size;
+		pr_debug("start addresss %p | size read %ld\n",addr,ret);
 
 
-				//fill this entry to global history list
-				node = (struct history_pme*)malloc(sizeof(struct history_pme));
-				node->mapp_addr  = (void *)addr;
-				node->vaddr      = (void *)pr.pmes[i]->vaddr;
-				node->nr_pages   = pr.pmes[i]->nr_pages;
-				node->end        = (void *)((unsigned long)node->vaddr + (node->nr_pages * PAGE_SIZE));
-				node->is_valid   = 1;
-				node->is_matched = -1;
-				node->next       = NULL;
+		//fill this entry to global history list
+		node = (struct history_pme*)malloc(sizeof(struct history_pme));
+		node->mapp_addr  = (void *)addr;
+		node->vaddr      = (void *)pme_tmp_list->start;
+		node->nr_pages   = (pme_tmp_list->end - pme_tmp_list->start)/PAGE_SIZE;
+		node->end        = (void *)((unsigned long)node->vaddr + (node->nr_pages * PAGE_SIZE));
+		node->is_valid   = 1;
+		node->is_matched = -1;
+		node->next       = NULL;
 
-				if(history_pme_head ==NULL){
-					history_pme_head = node;
-					history_pme_tail = node;
-				}else{
-					history_pme_tail->next = node;
-					history_pme_tail = node;
-				}
-
-			}
-			else{
-				//for consecutive pre-dumps
-
-				struct history_pme *tmp = history_pme_head;
-				unsigned long end;
-				int new_entry;
-				new_entry = -1;
-				end = (pr.pmes[i]->nr_pages*PAGE_SIZE + pr.pmes[i]->vaddr);
-
-				pr_debug("Else 2nd pre-dump \n\n\n");
-
-				while(tmp){
-
-					//case a : see cases info in above comment
- 					if((tmp->is_valid == 1) && pr.pmes[i]->vaddr >= (unsigned long)tmp->vaddr && end <= (unsigned long)tmp->end){
-						
-						 unsigned long size,ret,addr_off_st,read_start;
-						 pr_debug("CASE: A \n");
-						 addr_off_st = 0;
-						 read_start  = 0;
-						 size = pr.pmes[i]->nr_pages*PAGE_SIZE;
-						 //have to take care of mmaped address
-						 addr_off_st = pr.pmes[i]->vaddr - (unsigned long)tmp->vaddr;
-						 read_start = (unsigned long)tmp->mapp_addr + addr_off_st ;
-
-						 ret = pread(page_fd,(void *)read_start,size,off_st);
-						 
-						 if(ret != size){
-							 tmp->is_valid = 0;
-							 pr_debug("\n\n\nCase A is valid 0\n\n\n");
-							 break;
-						 }
-						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
-												 
-						 new_entry = 1;
-						 break;
-					 }
-					//case b 
- 					if((tmp->is_valid==1) && pr.pmes[i]->vaddr < (unsigned long)tmp->vaddr && end > (unsigned long)tmp->vaddr && end <= (unsigned long)tmp->end){
-						 
-						 unsigned long size,ret,addr_off_st;
-						 pr_debug("CASE: B \n");
-						 addr_off_st = (unsigned long)tmp->vaddr - pr.pmes[i]->vaddr;
-						 size = pr.pmes[i]->nr_pages*PAGE_SIZE - addr_off_st;
-						 off_st += addr_off_st;
-						 //have to take care of mmaped address
-						 //addr_off_st =(unsigned long)tmp->vaddr - pr.pmes[i]->vaddr;
-						 ret = pread(page_fd,(void *)tmp->mapp_addr,size,off_st);
-						 if(ret != size){
-							 tmp->is_valid = 0;
-							 pr_debug("\n\n\nCase B is valid 0\n\n\n");
-
-							 off_st-=addr_off_st;
-							 continue;
-						 }
-						 //Reset the offset bc in end we are incrementing it anyway
-						 off_st-=addr_off_st;
-
-						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
-						 new_entry     = 1;
-					 }
-					//case c 
- 					if((tmp->is_valid==1) && pr.pmes[i]->vaddr >= (unsigned long)tmp->vaddr &&pr.pmes[i]->vaddr < (unsigned long)tmp->end && end > (unsigned long)tmp->end){
- 						 
-						 unsigned long size,ret,addr_off_st,read_start;
-						 pr_debug("CASE: C \n");
-						 addr_off_st = 0;
-						 //have to take care of mmaped address
-						 addr_off_st = pr.pmes[i]->vaddr - (unsigned long)tmp->vaddr;
-						 size = pr.pmes[i]->vaddr - (unsigned long)tmp->end;
-						 pr_debug("\n\n\n Size Reverse %ld lpme-> start %p cpme->start %p lpme->end %p cpme->end %p \n\n\n",size,tmp->vaddr,(void *)pr.pmes[i]->vaddr,tmp->end,(void *)end);
-						 size = (unsigned long)tmp->end - pr.pmes[i]->vaddr;
-						 read_start = (unsigned long)tmp->mapp_addr + addr_off_st;
-
-						 ret = pread(page_fd,(void *)read_start,size,off_st);
-						 
-						 if(ret != size){
-							 tmp->is_valid = 0;
-							 pr_debug("\n\n\nCase C is valid 0\n\n\n");
-
-							 //reset the offset if not read properly
-							 //off_st-=ret;
-							// break;
-						 }
-						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
-						 new_entry     = 1;
-					 }
+		if(history_pme_head ==NULL){
+			history_pme_head = node;
+			history_pme_tail = node;
+		}else{
+			history_pme_tail->next = node;
+			history_pme_tail = node;
+		}
 
 
-					tmp=tmp->next;
-				}
-
-				if(new_entry == -1){
-					//new entry found add to list
-				}
-
-				off_st += (pr.pmes[i]->nr_pages *PAGE_SIZE);
-
-			}
-
-		}	
+		pme_tmp_list = pme_tmp_list->next;
 	}
+
+
+	// for(int i=0;i<pr.nr_pmes;i++){
+
+	// 	unsigned long size = ((unsigned long)pr.pmes[i]->nr_pages) * PAGE_SIZE;
+	// 	/*
+	// 		PE_PARENT  1<<0
+	// 		PE_LAZY    1<<1
+	// 		PE_PRESENT 1<<2
+	// 	*/
+
+	// 	if(pr.pmes[i]->flags>=4){
+	// 		//present
+
+
+	// 		/*
+	// 		 * For consecutive pre dump we have to make x vmas data valid like if uptdate happend
+	// 		 * in consecutive predump we have to keep overwrite the vma content.
+	// 		 * and if there is new entry in pagemap we have to add new vma to the list of x vmas
+	// 		 * there can be four case of overlap that we have to handle to make vma data valid
+	// 		 * 
+	// 		 *  case 1:
+	// 		 *  |+++++++++old+++++++++|
+	// 		 * 		|------new----|
+	// 		 * 
+	// 		 *  case 2:
+	// 		 *  		|+++++++++old+++++++|
+	// 		 *  |-------new------|
+	// 		 * 
+	// 		 *  case 3:
+	// 		 * 	|+++++++++old++++++++|
+	// 		 *               |---------new-------|
+	// 		 *  
+	// 		 *  case 4:
+	// 		 *  |--------new-------| 
+	// 		 * 	
+	// 		 * 
+	// 		 */
+
+
+	// 		if(dump_no == 1){
+	// 			size_t ret=0;
+	// 			addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0);
+	// 			ret = pread(page_fd, addr, size, off_st);
+	// 			if(size!=ret){
+	// 				pr_debug("Not able to read properly Actual size : %ld, Actual read :%ld\n",size,ret);
+	// 				continue;
+	// 				//skipping this read
+	// 			}
+	// 			//Increasing offset for next pageread
+	// 			off_st+=size;
+	// 			pr_debug("start addresss %p | size read %ld\n",addr,ret);
+
+
+	// 			//fill this entry to global history list
+	// 			node = (struct history_pme*)malloc(sizeof(struct history_pme));
+	// 			node->mapp_addr  = (void *)addr;
+	// 			node->vaddr      = (void *)pr.pmes[i]->vaddr;
+	// 			node->nr_pages   = pr.pmes[i]->nr_pages;
+	// 			node->end        = (void *)((unsigned long)node->vaddr + (node->nr_pages * PAGE_SIZE));
+	// 			node->is_valid   = 1;
+	// 			node->is_matched = -1;
+	// 			node->next       = NULL;
+
+	// 			if(history_pme_head ==NULL){
+	// 				history_pme_head = node;
+	// 				history_pme_tail = node;
+	// 			}else{
+	// 				history_pme_tail->next = node;
+	// 				history_pme_tail = node;
+	// 			}
+
+	// 		}
+	// 		else{
+	// 			//for consecutive pre-dumps
+
+	// 			struct history_pme *tmp = history_pme_head;
+	// 			unsigned long end;
+	// 			int new_entry;
+	// 			new_entry = -1;
+	// 			end = (pr.pmes[i]->nr_pages*PAGE_SIZE + pr.pmes[i]->vaddr);
+
+	// 			pr_debug("Else 2nd pre-dump \n\n\n");
+
+	// 			while(tmp){
+
+	// 				//case a : see cases info in above comment
+ 	// 				if((tmp->is_valid == 1) && pr.pmes[i]->vaddr >= (unsigned long)tmp->vaddr && end <= (unsigned long)tmp->end){
+						
+	// 					 unsigned long size,ret,addr_off_st,read_start;
+	// 					 pr_debug("CASE: A \n");
+	// 					 addr_off_st = 0;
+	// 					 read_start  = 0;
+	// 					 size = pr.pmes[i]->nr_pages*PAGE_SIZE;
+	// 					 //have to take care of mmaped address
+	// 					 addr_off_st = pr.pmes[i]->vaddr - (unsigned long)tmp->vaddr;
+	// 					 read_start = (unsigned long)tmp->mapp_addr + addr_off_st ;
+
+	// 					 ret = pread(page_fd,(void *)read_start,size,off_st);
+						 
+	// 					 if(ret != size){
+	// 						 tmp->is_valid = 0;
+	// 						 pr_debug("\n\n\nCase A is valid 0\n\n\n");
+	// 						 break;
+	// 					 }
+	// 					 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
+												 
+	// 					 new_entry = 1;
+	// 					 break;
+	// 				 }
+	// 				//case b 
+ 	// 				if((tmp->is_valid==1) && pr.pmes[i]->vaddr < (unsigned long)tmp->vaddr && end > (unsigned long)tmp->vaddr && end <= (unsigned long)tmp->end){
+						 
+	// 					 unsigned long size,ret,addr_off_st;
+	// 					 pr_debug("CASE: B \n");
+	// 					 addr_off_st = (unsigned long)tmp->vaddr - pr.pmes[i]->vaddr;
+	// 					 size = pr.pmes[i]->nr_pages*PAGE_SIZE - addr_off_st;
+	// 					 off_st += addr_off_st;
+	// 					 //have to take care of mmaped address
+	// 					 //addr_off_st =(unsigned long)tmp->vaddr - pr.pmes[i]->vaddr;
+	// 					 ret = pread(page_fd,(void *)tmp->mapp_addr,size,off_st);
+	// 					 if(ret != size){
+	// 						 tmp->is_valid = 0;
+	// 						 pr_debug("\n\n\nCase B is valid 0\n\n\n");
+
+	// 						 off_st-=addr_off_st;
+	// 						 continue;
+	// 					 }
+	// 					 //Reset the offset bc in end we are incrementing it anyway
+	// 					 off_st-=addr_off_st;
+
+	// 					 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
+	// 					 new_entry     = 1;
+	// 				 }
+	// 				//case c 
+ 	// 				if((tmp->is_valid==1) && pr.pmes[i]->vaddr >= (unsigned long)tmp->vaddr &&pr.pmes[i]->vaddr < (unsigned long)tmp->end && end > (unsigned long)tmp->end){
+ 						 
+	// 					 unsigned long size,ret,addr_off_st,read_start;
+	// 					 pr_debug("CASE: C \n");
+	// 					 addr_off_st = 0;
+	// 					 //have to take care of mmaped address
+	// 					 addr_off_st = pr.pmes[i]->vaddr - (unsigned long)tmp->vaddr;
+	// 					 size = pr.pmes[i]->vaddr - (unsigned long)tmp->end;
+	// 					 pr_debug("\n\n\n Size Reverse %ld lpme-> start %p cpme->start %p lpme->end %p cpme->end %p \n\n\n",size,tmp->vaddr,(void *)pr.pmes[i]->vaddr,tmp->end,(void *)end);
+	// 					 size = (unsigned long)tmp->end - pr.pmes[i]->vaddr;
+	// 					 read_start = (unsigned long)tmp->mapp_addr + addr_off_st;
+
+	// 					 ret = pread(page_fd,(void *)read_start,size,off_st);
+						 
+	// 					 if(ret != size){
+	// 						 tmp->is_valid = 0;
+	// 						 pr_debug("\n\n\nCase C is valid 0\n\n\n");
+
+	// 						 //reset the offset if not read properly
+	// 						 //off_st-=ret;
+	// 						// break;
+	// 					 }
+	// 					 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pr.pmes[i]->vaddr,ret/4096);
+	// 					 new_entry     = 1;
+	// 				 }
+
+
+	// 				tmp=tmp->next;
+	// 			}
+
+	// 			if(new_entry == -1){
+	// 				//new entry found add to list
+	// 			}
+
+	// 			off_st += (pr.pmes[i]->nr_pages *PAGE_SIZE);
+
+	// 		}
+
+	// 	}	
+	// }
 
 
 	//print linked list{
@@ -1744,11 +1813,15 @@ int prepare_mappings(struct pstree_item *t)
 	void *addr;
 	struct vm_area_list *vmas;
 	struct page_read pr;
+	// struct vma_area *vma;
+	// struct list_head *vmas_head;
+
 
 	void *old_premmapped_addr = NULL;
 	unsigned long old_premmapped_len;
 
 	vmas = &rsti(t)->vmas;
+	// vmas_head = &rsti(t)->vmas.h;
 	if (vmas->nr == 0) /* Zombie */
 		goto out;
 
@@ -1787,6 +1860,31 @@ int prepare_mappings(struct pstree_item *t)
 
 	//In case pieok == false it will fill the pages in this function
 	ret = restore_priv_vma_content(t, &pr);
+
+
+	/*
+	 * Printing page bitmap of vma
+	 * 
+	 */
+
+	// list_for_each_entry(vma, vmas_head, list) {
+
+    //     unsigned long size, i = 0;
+    //     size = vma_entry_len(vma->e) / PAGE_SIZE;
+
+    //     pr_debug("vma start : %p  vma end : %p\n",(void *)vma->e->start,(void *)vma->e->end);
+    //     while(1){
+    //         //Find all pages
+    //         i = find_next_bit(vma->page_bitmap, size, i);
+    //         if(i>=size)break;
+
+
+    //         i++;
+    //     }
+    //         pr_debug(" %ld",i);
+    //     pr_debug("\n\n\n");
+	// }
+
 	if (ret < 0)
 		goto out;
 
