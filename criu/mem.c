@@ -942,15 +942,19 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 				 * AFter  remap |+++++++++++++++-------|
 				 * 
 				 */
-				unsigned long old_size,new_size;
+				unsigned long old_size;
+				void *change_addr;
 				old_size = (unsigned long)tmp->end - (unsigned long)tmp->vaddr;
-				new_size = (unsigned long)vma->e->end - (unsigned long)vma->e->start;
+				//new_size = (unsigned long)vma->e->end - (unsigned long)vma->e->start;
+				// new_size =0;
 
-				
-
-				mremap(tmp->mapp_addr,old_size,new_size,0);
-				tmp->end = (void *)((unsigned long)tmp->vaddr + (unsigned long)new_size);
-				tmp->nr_pages = new_size /PAGE_SIZE;
+				change_addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE,0,0);
+				memcpy(change_addr,tmp->mapp_addr,old_size);
+				tmp->mapp_addr = change_addr;
+				// orgin_addr = mremap(tmp->mapp_addr,old_size,old_size,0);
+				// pr_debug("\n\n\n Orgin addr %p Mapped addr %p\n\n\n",orgin_addr,tmp->mapp_addr);
+				tmp->end = (void *)((unsigned long)tmp->vaddr + (unsigned long)size);
+				tmp->nr_pages = size /PAGE_SIZE;
 
 				pr_debug("\n\n\n been there  new start %p new end %p \n\n\n",tmp->vaddr,tmp->end);
 				found =1;
@@ -964,11 +968,18 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		}
 
 		if(found ==1){
+			unsigned long old_size;
 			pr_debug("Matching found at %p  nr_pages %ld \n",(void *)tmp->vaddr,size/PAGE_SIZE);
 			// change protection of mmaped vma 
 			//int mprotect(void *addr, size_t len, int prot);
-			mprotect(tmp->mapp_addr,size,vma->e->prot | PROT_WRITE);
+
+			old_size = (unsigned long)tmp->end - (unsigned long)tmp->vaddr;
 			addr = mremap(tmp->mapp_addr, size, size,MREMAP_FIXED | MREMAP_MAYMOVE, *tgt_addr);
+			mprotect(addr,size,vma->e->prot | PROT_WRITE);
+
+			pr_debug("\n\n\n else part second premap Orgin addr %p Mapped addr %p\n\n\n",addr,*tgt_addr);
+			pr_debug("Arguments 1: %p, 2: %ld, 3: %ld, 5 %p",tmp->mapp_addr,old_size,old_size,*tgt_addr);
+
 		 	if (addr != *tgt_addr) {
 		 		pr_perror("Unable to remap a private vma");
 		 		return -1;
@@ -1580,7 +1591,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 		size_t ret,size;
 		ret  = 0;
 		size = pme_tmp_list->end - pme_tmp_list->start;
-		addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_POPULATE,0, 0);
+		addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE,0, 0);
 		ret = pread(page_fd, addr, size, off_st);
 		if(size!=ret){
 			pr_debug("Not able to read properly Actual size : %ld, Actual read :%ld\n",size,ret);
