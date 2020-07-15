@@ -46,9 +46,9 @@ struct pme_list *pme_list_tail = NULL;
 struct history_pme{
 	
 	/* list of VMAs */
-	void* mapp_addr;
-	void* vaddr;
-	void* end;
+	uint64_t mapp_addr;
+	uint64_t start;
+	uint64_t end;
 	unsigned long nr_pages;
 	int is_valid;
 	int is_matched;
@@ -930,11 +930,11 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		tmp = history_pme_head;
 		found = -1;
 		while(tmp){
-			if((tmp->is_valid == 1) && (unsigned long)vma->e->start == (unsigned long)tmp->vaddr && (unsigned long)vma->e->end == (unsigned long)tmp->end && (unsigned long)size == (unsigned long)(tmp->nr_pages * PAGE_SIZE)){
+			if((tmp->is_valid == 1) && (unsigned long)vma->e->start == tmp->start && (unsigned long)vma->e->end == tmp->end && (unsigned long)size == (unsigned long)(tmp->nr_pages * PAGE_SIZE)){
 				found =1;
 				break;
 			}
-			else if((tmp->is_valid == 1) && (unsigned long)vma->e->start == (unsigned long)tmp->vaddr && (unsigned long)vma->e->end > (unsigned long)tmp->end){
+			else if((tmp->is_valid == 1) && (unsigned long)vma->e->start == tmp->start && (unsigned long)vma->e->end > tmp->end){
 				/*
 				 *
 				 * original vma |++++++++++++++++++++++|
@@ -945,19 +945,19 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 				 */
 				unsigned long old_size;
 				void *change_addr;
-				old_size = (unsigned long)tmp->end - (unsigned long)tmp->vaddr;
+				old_size = tmp->end - tmp->start;
 				//new_size = (unsigned long)vma->e->end - (unsigned long)vma->e->start;
 				// new_size =0;
 
 				change_addr = mmap(NULL,size,PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE,0,0);
-				memcpy(change_addr,tmp->mapp_addr,old_size);
-				tmp->mapp_addr = change_addr;
+				memcpy(change_addr,(void *)tmp->mapp_addr,old_size);
+				tmp->mapp_addr = (unsigned long)change_addr;
 				// orgin_addr = mremap(tmp->mapp_addr,old_size,old_size,0);
 				// pr_debug("\n\n\n Orgin addr %p Mapped addr %p\n\n\n",orgin_addr,tmp->mapp_addr);
-				tmp->end = (void *)((unsigned long)tmp->vaddr + (unsigned long)size);
+				tmp->end = (tmp->start + (unsigned long)size);
 				tmp->nr_pages = size /PAGE_SIZE;
 
-				pr_debug("\n\n\n Case 1: been there  new start %p new end %p \n\n\n",tmp->vaddr,tmp->end);
+				pr_debug("\n\n\n Case 1: been there  new start %p new end %p \n\n\n",(void *)tmp->start,(void *)tmp->end);
 				found =1;
 				break;
 
@@ -995,16 +995,16 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 
 		if(found ==1){
 			unsigned long old_size;
-			pr_debug("Matching found at %p  nr_pages %ld \n",(void *)tmp->vaddr,size/PAGE_SIZE);
+			pr_debug("Matching found at %p  nr_pages %ld \n",(void *)tmp->start,size/PAGE_SIZE);
 			// change protection of mmaped vma 
 			//int mprotect(void *addr, size_t len, int prot);
 
-			old_size = (unsigned long)tmp->end - (unsigned long)tmp->vaddr;
-			addr = mremap(tmp->mapp_addr, size, size,MREMAP_FIXED | MREMAP_MAYMOVE, *tgt_addr);
+			old_size = tmp->end - tmp->start;
+			addr = mremap((void *)tmp->mapp_addr, size, size,MREMAP_FIXED | MREMAP_MAYMOVE, *tgt_addr);
 			mprotect(addr,size,vma->e->prot | PROT_WRITE);
 
 			pr_debug("\n\n\n else part second premap Orgin addr %p Mapped addr %p\n\n\n",addr,*tgt_addr);
-			pr_debug("Arguments 1: %p, 2: %ld, 3: %ld, 5 %p",tmp->mapp_addr,old_size,old_size,*tgt_addr);
+			pr_debug("Arguments 1: %p, 2: %ld, 3: %ld, 5 %p",(void *)tmp->mapp_addr,old_size,old_size,*tgt_addr);
 
 		 	if (addr != *tgt_addr) {
 		 		pr_perror("Unable to remap a private vma");
@@ -1608,6 +1608,9 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 	ret = open_page_read_parallel(dir_fd, process_id, &pr, PR_TASK);
 	if(ret<=0)return -1;
 
+	page_fd = img_raw_fd(pr.pi);
+
+
 	//Why advance
 	/*
 		pr->curr_pme++;
@@ -1651,7 +1654,6 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 
 		// redaing pages now to criu address space
 
-		page_fd = img_raw_fd(pr.pi);
 
 		pme_tmp_list = pme_list_head;
 		while(pme_tmp_list){
@@ -1674,10 +1676,10 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 
 			//fill this entry to global history list
 			node = (struct history_pme*)malloc(sizeof(struct history_pme));
-			node->mapp_addr  = (void *)addr;
-			node->vaddr      = (void *)pme_tmp_list->start;
+			node->mapp_addr  = (uint64_t)addr;
+			node->start      = pme_tmp_list->start;
 			node->nr_pages   = (pme_tmp_list->end - pme_tmp_list->start)/PAGE_SIZE;
-			node->end        = (void *)((unsigned long)node->vaddr + (node->nr_pages * PAGE_SIZE));
+			node->end        = (node->start + (node->nr_pages * PAGE_SIZE));
 			node->is_valid   = 1;
 			node->is_matched = -1;
 			node->next       = NULL;
@@ -1703,10 +1705,12 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 			 * free old pme list
 			 *  free_pme_list(pme_list_head);
 			 */
+			free_pme_list(pme_list_head);
 			pme_list_head = NULL;
 			for(int i=0;i< pr.nr_pmes; i++){
 
-				if(pr.pmes[i]->flags >=4){						
+				if(pr.pmes[i]->flags >=4){
+					//if pages are present here						
 					struct pme_list *node = (struct pme_list*)malloc(sizeof(struct pme_list));
 					node->start = pr.pmes[i]->vaddr;
 					node->end   = pr.pmes[i]->vaddr + (pr.pmes[i]->nr_pages * PAGE_SIZE);
@@ -1739,7 +1743,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 					//Handling case of overlap
 
 					//case 1:
-					if((history_pme_tmp->is_valid == 1) && pme_tmp_list->start >= (unsigned long)history_pme_tmp->vaddr && pme_tmp_list->end <= (unsigned long)history_pme_tmp->end){
+					if((history_pme_tmp->is_valid == 1) && pme_tmp_list->start >= history_pme_tmp->start && pme_tmp_list->end <= history_pme_tmp->end){
 						/*
 						 * Total over lap
 						 * List 1: A|+++++++++++++++++++|B    history_pme_tmp
@@ -1757,91 +1761,132 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 read_start  = 0;
 						 size = pme_tmp_list->end - pme_tmp_list->start;
 						 //have to take care of mmaped address
-						 addr_off_st = pme_tmp_list->start - (unsigned long)history_pme_tmp->vaddr;
-						 read_start = (unsigned long)history_pme_tmp->mapp_addr + addr_off_st ;
+						 addr_off_st = pme_tmp_list->start - history_pme_tmp->start;
+						 read_start = history_pme_tmp->mapp_addr + addr_off_st ;
+
+						 pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",(void *)read_start,page_fd,size);
 
 						 ret = pread(page_fd,(void *)read_start,size,off_st);
 						 
 						 if(ret != size){
 							 history_pme_tmp->is_valid = 0;
-							 pr_debug("\n\n\nCase A is valid 0 not able to read full bytes\n\n\n");
+							 pr_debug("\n\n\nCase A is not able to read succesfully Actual read %ld : Desired %ld \n\n\n",ret,size);
 							 break;
 						 }
 						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pme_tmp_list->start,ret/4096);
 												 
 						 //new_entry = 1;
 						 break;
-					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start >= (unsigned long)history_pme_tmp->vaddr && pme_tmp_list->start < (unsigned long)history_pme_tmp->end && pme_tmp_list->end > (unsigned long)history_pme_tmp->end){
+					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start >= history_pme_tmp->start && pme_tmp_list->start < history_pme_tmp->end && pme_tmp_list->end > history_pme_tmp->end){
 						/*
+						 * Approach 5
 						 * partial over lap
 						 * List 1: A|+++++++++++++++++++|B    			history_pme_tmp
-						 * List 2: 			C|++++++++++++++++|D	    pme_tmp_list
-						 * Condition if( C>= A && C<B && D>B)
+						 * List 2: 			C|+++++++++++++++++|D	    pme_tmp_list
+						 * UPDATE
+						 * List 1: E|++++++++++++++++++++++++++|F
 						 * 
-						 * offset handling
-						 * read_start_addr = C-A;
-						 * read_size = B-C;
-						 * 
+						 *  s1	Do mmap(C-D)
+						 *  s2	Read fill (C-D)
+						 * 	s3	Do mmap(E-F)
+						 * 	s4	mremap(A into E)
+						 *  s5	addr_offset  = C-A
+						 * 	s6	mremap(C into (E+ addroffset))
+						 * 	s7  update mmap_addr of history_list
+						 *  s8 	free both A and C
 						 */ 
-						 unsigned long size,ret,addr_off_st,read_start;
-						 pr_debug("CASE: C \n");
-						 addr_off_st = 0;
-						 //have to take care of mmaped address
-						 addr_off_st = pme_tmp_list->start - (unsigned long)history_pme_tmp->vaddr;
-						 size = (unsigned long)history_pme_tmp->end - pme_tmp_list->start;
-						 read_start = (unsigned long)history_pme_tmp->mapp_addr + addr_off_st;
 
-						 ret = pread(page_fd,(void *)read_start,size,off_st);
-						 
-						 if(ret != size){
-							 history_pme_tmp->is_valid = 0;
-							 pr_debug("\n\n\nCase C is valid 0 not able to read full bytes\n\n\n");
-							 //reset the offset if not read properly
-							 //off_st-=ret;
-							// break;
-						 }
-						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pme_tmp_list->start,ret/4096);
-						// new_entry     = 1;
+						void *first_addr, *sec_addr, *remap_addr, *offset_addr;
+						uint64_t first_size, sec_size, third_size, addr_offst,ret;
+
+						first_size = history_pme_tmp->end - history_pme_tmp->start;  //List 1
+						sec_size   = pme_tmp_list->end - pme_tmp_list->start;		 //List 2
+						third_size = pme_tmp_list->end - history_pme_tmp->start;	 //List mod
+
+						first_addr = mmap(NULL,sec_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+						
+
+						pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
+						ret = pread(page_fd,first_addr,sec_size,off_st);
+						if(ret != first_size){
+							pr_debug("Case B Unable to do pread successful\n");
+							return -1;
+						}
+						
+						sec_addr   = mmap(NULL,third_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+
+						remap_addr = mremap((void *)history_pme_tmp->mapp_addr,first_size,first_size,MREMAP_FIXED|MREMAP_MAYMOVE,sec_addr);
+						if(remap_addr != sec_addr){
+							pr_debug("Case B Unable to do 1st mremap successful\n");
+						}
+						
+						addr_offst = pme_tmp_list->start - history_pme_tmp->start;
+						offset_addr = (void *)(addr_offst+(unsigned long)sec_addr);
+
+						remap_addr = mremap((void *)pme_tmp_list->start,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
+						if(remap_addr != offset_addr){
+							pr_debug("Case B Unable to do 2nd mremap successful\n");
+
+						}
+						
+						munmap((void *)history_pme_tmp->mapp_addr,first_size);
+						munmap(first_addr,sec_size);
+						history_pme_tmp->mapp_addr = (unsigned long)sec_addr;
 		
-					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start < (unsigned long)history_pme_tmp->vaddr && pme_tmp_list->end > (unsigned long)history_pme_tmp->vaddr && pme_tmp_list->end <= (unsigned long)history_pme_tmp->end){
+					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start < history_pme_tmp->start && pme_tmp_list->end > history_pme_tmp->start && pme_tmp_list->end <= history_pme_tmp->end){
 						/*
+						 * Approach 5
 						 * partial over lap
-						 * List 1: 		A|+++++++++++++++++++|B    	history_pme_tmp
-						 * List 2: C|++++++++++++++++|D	    		pme_tmp_list
-						 * Condition if( C < A && D<B && D>A)
+						 * List 1: 			A|+++++++++++++++++++|B    			history_pme_tmp
+						 * List 2: 	C|++++++++++++++++|D	    				pme_tmp_list
+						 * UPDATE
+						 * List 1:  E|+++++++++++++++++++++++++++|F
 						 * 
-						 * offset handling
-						 * read_start_addr = A;
-						 * read_size 	   = D-A;
-						 * 
-						 * we have take care of file offset also
-						 * we have to Jump A-C
-						 * offset + = A-C
-						 * 
-						 * after reading we have to reset the offset beacuse in the end of while loop
-						 * we are skipping offset anyway
-						 * offset += D-C
+						 *  s1	Do mmap(C-D)
+						 *  s2	Read fill (C-D)
+						 * 	s3	Do mmap(E-F)
+						 * 	s4	mremap(C into E)
+						 *  s5	addr_offset  = A-C
+						 * 	s6	mremap(A into (E+addr_offset))
+						 * 	s7  update mmap_addr of history_list
+						 *  s8 	free both A and C
 						 */
-						 unsigned long size,ret,skip_offset;
-						 pr_debug("CASE: B \n");
-						 skip_offset = (unsigned long)history_pme_tmp->vaddr - pme_tmp_list->start;
-						 size = pme_tmp_list->end - (unsigned long)history_pme_tmp->vaddr;
-						 off_st += skip_offset;
-						 //have to take care of mmaped address
-						 //addr_off_st =(unsigned long)tmp->vaddr - pr.pmes[i]->vaddr;
-						 ret = pread(page_fd,(void *)history_pme_tmp->mapp_addr,size,off_st);
-						 if(ret != size){
-							 history_pme_tmp->is_valid = 0;
-							 pr_debug("\n\n\nCase B is valid 0  not able to read full bytes\n\n\n");
 
-							 off_st-=skip_offset;
-							 continue;
-						 }
-						 //Reset the offset bc in end we are incrementing it anyway
-						 off_st-=skip_offset;
+						void *first_addr, *sec_addr, *remap_addr, *offset_addr;
+						uint64_t first_size, sec_size, third_size, addr_offst,ret;
 
-						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pme_tmp_list->start,ret/4096);
-						 //new_entry     = 1;
+						first_size = history_pme_tmp->end - history_pme_tmp->start;  //List 1
+						sec_size   = pme_tmp_list->end - pme_tmp_list->start;		 //List 2
+						third_size = history_pme_tmp->end - pme_tmp_list->start;	 //List mod
+
+						first_addr = mmap(NULL,sec_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+						
+						pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
+						ret = pread(page_fd,first_addr,sec_size,off_st);
+						if(ret != first_size){
+							pr_debug("Case C Unable to do pread successful\n");
+							return -1;
+						}
+						
+						sec_addr   = mmap(NULL,third_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+
+						remap_addr = mremap(first_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,sec_addr);
+						if(remap_addr != sec_addr){
+							pr_debug("Case C Unable to do 1st mremap successful\n");
+						}
+						
+						addr_offst = history_pme_tmp->start - pme_tmp_list->start;
+						offset_addr = (void *)(addr_offst+(unsigned long)sec_addr);
+
+						remap_addr = mremap((void *)history_pme_tmp->mapp_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
+						if(remap_addr != offset_addr){
+							pr_debug("Case C Unable to do 2nd mremap successful\n");
+
+						}
+						
+						munmap((void *)history_pme_tmp->mapp_addr,first_size);
+						munmap(first_addr,sec_size);
+						history_pme_tmp->mapp_addr = (unsigned long)sec_addr;
 					}
 
 					history_pme_tmp = history_pme_tmp->next;
@@ -2036,7 +2081,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 
 	history_pme_tmp = history_pme_head;
 	while(history_pme_tmp){
-		pr_debug("shubham printing list start : %p, end :%p   , nr_of pages %ld, valid %d\n",(void *)history_pme_tmp->vaddr,(void*)history_pme_tmp->end,history_pme_tmp->nr_pages, history_pme_tmp->is_valid);
+		pr_debug("shubham printing list start : %p, end :%p   , nr_of pages %ld, valid %d\n",(void *)history_pme_tmp->start,(void*)history_pme_tmp->end,history_pme_tmp->nr_pages, history_pme_tmp->is_valid);
 		history_pme_tmp=history_pme_tmp->next;
 	}
 	
