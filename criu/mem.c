@@ -1739,6 +1739,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 
 			while(pme_tmp_list){
 
+				int case_occur =-1;
 				while(history_pme_tmp){
 					//Handling case of overlap
 
@@ -1776,6 +1777,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 pr_debug("Succefully override the pages in vma %p  nr_pages %ld\n",(void *)pme_tmp_list->start,ret/4096);
 												 
 						 //new_entry = 1;
+						 case_occur = 1;
 						 break;
 					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start >= history_pme_tmp->start && pme_tmp_list->start < history_pme_tmp->end && pme_tmp_list->end > history_pme_tmp->end){
 						/*
@@ -1835,6 +1837,8 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						history_pme_tmp->mapp_addr = (unsigned long)sec_addr;
 						history_pme_tmp->end = history_pme_tmp->start + third_size;
 						history_pme_tmp->nr_pages = (history_pme_tmp->end - history_pme_tmp->start)/4096;
+						case_occur = 1;
+
 		
 					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start < history_pme_tmp->start && pme_tmp_list->end > history_pme_tmp->start && pme_tmp_list->end <= history_pme_tmp->end){
 						/*
@@ -1890,6 +1894,51 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						munmap((void *)history_pme_tmp->mapp_addr,first_size);
 						munmap(first_addr,sec_size);
 						history_pme_tmp->mapp_addr = (unsigned long)sec_addr;
+						history_pme_tmp->end = history_pme_tmp->start + third_size;
+						history_pme_tmp->nr_pages = (history_pme_tmp->end - history_pme_tmp->start)/4096;
+						case_occur = 1;
+					}
+
+					if(case_occur == -1){
+						/*
+						 * Case D
+						 * Here there is no case of overlapping will occured so
+						 * that means ita new vma we should directly add into history list
+						 * 
+						 * List2 : C|+++++++++++++++++++++++|D
+						 * 
+						 * s1: mmap(C-D)
+						 * s2: add it to history list
+						 *
+						 */
+
+						unsigned long sec_size;
+						void *first_addr;
+
+						sec_size   = pme_tmp_list->end - pme_tmp_list->start;
+						first_addr = mmap(NULL,sec_size,PROT_WRITE|PROT_READ,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+						if(first_addr== MAP_FAILED){
+							pr_debug("MMap failde for CASE D\n");
+							return -1;
+						}
+
+						node = (struct history_pme*)malloc(sizeof(struct history_pme));
+						node->mapp_addr  = (uint64_t)first_addr;
+						node->start      = pme_tmp_list->start;
+						node->nr_pages   = (pme_tmp_list->end - pme_tmp_list->start)/PAGE_SIZE;
+						node->end        = (node->start + (node->nr_pages * PAGE_SIZE));
+						node->is_valid   = 1;
+						node->is_matched = -1;
+						node->next       = NULL;
+
+						if(history_pme_head ==NULL){
+							history_pme_head = node;
+							history_pme_tail = node;
+						}else{
+							history_pme_tail->next = node;
+							history_pme_tail = node;
+						}
+						
 					}
 
 					history_pme_tmp = history_pme_tmp->next;
