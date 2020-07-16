@@ -85,7 +85,7 @@ int main(void){
 
         printf("Insertion completed till %ld please take dump nr %d...\n",i,j);
         printf("Process ID : %d\nEnter some integer to continue\n",getpid());
-        scanf("%ld",&t);        
+        scanf("%ld",&t);         
     }
 
 
