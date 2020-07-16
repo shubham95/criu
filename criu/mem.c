@@ -1804,12 +1804,13 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						third_size = pme_tmp_list->end - history_pme_tmp->start;	 //List mod
 
 						first_addr = mmap(NULL,sec_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+
 						
 
 						pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
 						ret = pread(page_fd,first_addr,sec_size,off_st);
-						if(ret != first_size){
-							pr_debug("Case B Unable to do pread successful\n");
+						if(ret != sec_size){
+							pr_debug("Case B Unable to do pread successful ret %ld  size %ld\n",ret,sec_size);
 							return -1;
 						}
 						
@@ -1863,7 +1864,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						
 						pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
 						ret = pread(page_fd,first_addr,sec_size,off_st);
-						if(ret != first_size){
+						if(ret != sec_size){
 							pr_debug("Case C Unable to do pread successful\n");
 							return -1;
 						}
