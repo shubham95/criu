@@ -1824,7 +1824,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						addr_offst = pme_tmp_list->start - history_pme_tmp->start;
 						offset_addr = (void *)(addr_offst+(unsigned long)sec_addr);
 
-						remap_addr = mremap((void *)pme_tmp_list->start,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
+						remap_addr = mremap((void *)first_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
 						if(remap_addr != offset_addr){
 							pr_debug("Case B Unable to do 2nd mremap successful\n");
 
@@ -1833,6 +1833,8 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						munmap((void *)history_pme_tmp->mapp_addr,first_size);
 						munmap(first_addr,sec_size);
 						history_pme_tmp->mapp_addr = (unsigned long)sec_addr;
+						history_pme_tmp->end = history_pme_tmp->start + third_size;
+						history_pme_tmp->nr_pages = (history_pme_tmp->end - history_pme_tmp->start)/4096;
 		
 					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start < history_pme_tmp->start && pme_tmp_list->end > history_pme_tmp->start && pme_tmp_list->end <= history_pme_tmp->end){
 						/*
