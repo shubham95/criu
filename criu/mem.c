@@ -1195,10 +1195,10 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	struct list_head *vmas = &rsti(t)->vmas.h;
 	struct list_head *vma_io = &rsti(t)->vma_io;
 	struct history_pme *tmp;
-	void *source_addr,*tgt_addr,*remap_addr;
+	void *source_addr,*tgt_addr; //,*remap_addr;
 
 	unsigned int nr_restored = 0;
-	unsigned int nr_shared = 0;
+	unsigned int nr_shared = 0; 
 	unsigned int nr_dropped = 0;
 	unsigned int nr_compared = 0;
 	unsigned int nr_lazy = 0;
@@ -1275,11 +1275,11 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			//mremap it
 			source_addr = (void*)(tmp->mapp_addr + (offset_va - tmp->start));
 			tgt_addr    = (void*)((unsigned long)my_vma->premmaped_addr + (offset_va - my_vma->e->start));
-			remap_addr  =  mremap(source_addr,read_size,read_size,MREMAP_FIXED|MREMAP_MAYMOVE,tgt_addr);
-
-			if(remap_addr != tgt_addr){
-				return -1;
-			}
+			//remap_addr  =  mremap(source_addr,read_size,read_size,MREMAP_FIXED|MREMAP_MAYMOVE,tgt_addr);
+			memcpy(tgt_addr,source_addr,read_size);
+			// if(remap_addr != tgt_addr){
+			// 	return -1;
+			// }
 			pr_debug("Succesfull mremap pages from start addr %p nr_pages %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE);
 			offset_va += read_size;
 
@@ -1307,7 +1307,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	 * Read page contents.
 	 */
 	pr_debug("Here\n");
-	while (1) {
+	while (0) {
 		unsigned long off, i, nr_pages;
 
 		ret = pr->advance(pr);
