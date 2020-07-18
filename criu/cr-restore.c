@@ -2489,13 +2489,6 @@ int cr_restore_parallel(void)
 		prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
 	}
 
-
-
-
-
-
-
-
 	return cr_restore_tasks();
 }
 
