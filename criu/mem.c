@@ -1190,7 +1190,7 @@ static int premap_priv_vmas(struct pstree_item *t, struct vm_area_list *vmas,
 
 static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 {
-	struct vma_area *vma;
+	struct vma_area *vma,*my_vma;
 	int ret = 0;
 	struct list_head *vmas = &rsti(t)->vmas.h;
 	struct list_head *vma_io = &rsti(t)->vma_io;
@@ -1207,6 +1207,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	unsigned long offset_va;
 
 	vma = list_first_entry(vmas, struct vma_area, list);
+	my_vma = list_first_entry(vmas, struct vma_area, list);
 	rsti(t)->pages_img_id = pr->pages_img_id;
 
 
@@ -1248,37 +1249,64 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	 * 
 	 */
 
+		pr_debug("Here\n");
+		pr_err("Here\n");
+
 	  tmp = history_pme_head;
-	  offset_va = tmp->start;
+	  if(tmp != NULL){
+		  /*
+		   * DISASTROUS ERORR 
+		   * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
+		   */
+		  offset_va = tmp->start;
+
+	  }
+
+		pr_debug("Here\n");
+		pr_err("Here\n");
 	  
 	  while(tmp){
 		
-		if(offset_va >= vma->e->start && offset_va < vma->e->end){
-			unsigned long read_size =  min_t(unsigned long,tmp->end - offset_va,vma->e->end - offset_va);
+		pr_debug("Here\n");
+		pr_err("Here\n");
+		if(offset_va >= my_vma->e->start && offset_va < my_vma->e->end){
+			unsigned long read_size =  min_t(unsigned long,tmp->end - offset_va,my_vma->e->end - offset_va);
 
 			//mremap it
 			source_addr = (void*)(tmp->mapp_addr + (offset_va - tmp->start));
-			tgt_addr    = (void*)((unsigned long)vma->premmaped_addr + (offset_va - vma->e->start));
+			tgt_addr    = (void*)((unsigned long)my_vma->premmaped_addr + (offset_va - my_vma->e->start));
 			remap_addr  =  mremap(source_addr,read_size,read_size,MREMAP_FIXED|MREMAP_MAYMOVE,tgt_addr);
 
 			if(remap_addr != tgt_addr){
 				return -1;
 			}
-			pr_debug("\n\n Succesfull mremap pages from start addr %p nr_pages %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE);
+			pr_debug("Succesfull mremap pages from start addr %p nr_pages %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE);
 			offset_va += read_size;
 
 			if(offset_va == tmp->end){
 				tmp = tmp->next;
+		  /*
+		   * DISASTROUS ERORR 
+		   * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
+		   */
+				if(tmp == NULL)break;
 				offset_va = tmp->start;
 			}
 		}else{
-			vma = vma_next(vma);
+			my_vma = vma_next(my_vma);
+		  /*
+		   * DISASTROUS ERORR 
+		   * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
+		   */
+			if(my_vma == NULL)break;
 		}
 	  }
-
+		pr_debug("Here\n");
+		pr_err("Here\n");
 	/*
 	 * Read page contents.
 	 */
+	pr_debug("Here\n");
 	while (1) {
 		unsigned long off, i, nr_pages;
 
@@ -1288,6 +1316,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 
 		va = (unsigned long)decode_pointer(pr->pe->vaddr);
 		nr_pages = pr->pe->nr_pages;
+
+		pr_err("here\n");
 
 
 		/*
@@ -1333,6 +1363,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			nr_lazy += nr_pages;
 			continue;
 		}
+		pr_err("here\n");
 
 		for (i = 0; i < nr_pages; i++) {
 			unsigned char buf[PAGE_SIZE];
@@ -1366,29 +1397,31 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			 *
 			 * Skipping whole vma
 			 */
-			if(vma->e->is_filled == 1){
-				unsigned long vma_nr_pages;
-				vma_nr_pages = 0;
-				vma_nr_pages = (vma->e->end - vma->e->start)/PAGE_SIZE;
+			pr_err("here\n");
+
+			// if(vma->e->is_filled == 1){
+			// 	unsigned long vma_nr_pages;
+			// 	vma_nr_pages = 0;
+			// 	vma_nr_pages = (vma->e->end - vma->e->start)/PAGE_SIZE;
 
 
-				pr_debug("Whether vma is filled or not start %p and end %p is_filled %d   va_nr %ld  vma_nr %ld\n\n",(void *)vma->e->start,(void *)vma->e->end,vma->e->is_filled,nr_pages,vma_nr_pages);		
+			// 	pr_debug("Whether vma is filled or not start %p and end %p is_filled %d   va_nr %ld  vma_nr %ld\n\n",(void *)vma->e->start,(void *)vma->e->end,vma->e->is_filled,nr_pages,vma_nr_pages);		
 
-				/*
-				 * This should work because our vma in this case is completely full 
-				 */
-				// if(nr_pages < vma_nr_pages){
-				// 	pr->skip_pages(pr,nr_pages*PAGE_SIZE);
-				// }
-				// else{
-				// 	pr->skip_pages(pr,vma_nr_pages * PAGE_SIZE);
-				// }
-				pr->skip_pages(pr,nr_pages*PAGE_SIZE);
-				nr_skip_is_filled += nr_pages;
-				i+=nr_pages;
-				continue;
+			// 	/*
+			// 	 * This should work because our vma in this case is completely full 
+			// 	 */
+			// 	// if(nr_pages < vma_nr_pages){
+			// 	// 	pr->skip_pages(pr,nr_pages*PAGE_SIZE);
+			// 	// }
+			// 	// else{
+			// 	// 	pr->skip_pages(pr,vma_nr_pages * PAGE_SIZE);
+			// 	// }
+			// 	pr->skip_pages(pr,nr_pages*PAGE_SIZE);
+			// 	nr_skip_is_filled += nr_pages;
+			// 	i+=nr_pages;
+			// 	continue;
 
-			}
+			// }
 			//Solve mystery when/why it goes to VMA_PREMMAPPED
 			if (!vma_area_is(vma, VMA_PREMMAPED)) {
 				

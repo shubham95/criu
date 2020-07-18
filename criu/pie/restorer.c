@@ -937,8 +937,33 @@ static int vma_remap(VmaEntry *vma_entry, int uffd)
 	unsigned long dst = vma_entry->start;
 	unsigned long len = vma_entry_len(vma_entry);
 	unsigned long guard = 0, tmp;
-
+	// int fd_from,fd_to;
+	// char buf[4096];
+	// ssize_t nread;
 	pr_info("Remap %lx->%lx len %lx\n", src, dst, len);
+
+
+
+
+	// fd_from = sys_open("/proc/self/maps",O_RDONLY,0666);
+	// fd_to = sys_open("/home/connoisseur/maps_",O_WRONLY|O_CREAT|O_APPEND,0666);
+
+	// while(nread = sys_read(fd_from,buf,sizeof(buf)),nread > 0){
+	// 	char *out_ptr;
+	// 	ssize_t nwritten;
+	// 	out_ptr = buf;
+
+	// 	do {
+	// 		nwritten = sys_write(fd_to,out_ptr,nread);
+	// 		if(nwritten >= 0){
+	// 			nread -= nwritten;
+	// 			out_ptr += nwritten;
+	// 		}
+	// 	}while (nread >0);
+
+	// }
+	// sys_close(fd_from);
+	// sys_close(fd_to);
 
 	if (src - dst < len)
 		guard = dst;
