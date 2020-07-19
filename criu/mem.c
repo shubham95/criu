@@ -1210,6 +1210,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	my_vma = list_first_entry(vmas, struct vma_area, list);
 	rsti(t)->pages_img_id = pr->pages_img_id;
 
+	//pr_debug("vmas %p\n",vmas);
 
 	//printing vma
 	// while (vma) {
@@ -1262,16 +1263,23 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 
 	  }
 
-		pr_debug("Here\n");
-		pr_err("Here\n");
-	  
-	  while(tmp){
-		
-		pr_debug("Here\n");
-		pr_err("Here\n");
-		if(offset_va >= my_vma->e->start && offset_va < my_vma->e->end){
-			unsigned long read_size =  min_t(unsigned long,tmp->end - offset_va,my_vma->e->end - offset_va);
+	  while(tmp && ((unsigned long)my_vma!= (unsigned long)vmas)){
+		  /*
+		   * Circular list condition break if you are at the end of list the next
+		   * pointer will point to the head pointer which is diffrent from first
+		   * node pointer 
+		   * And accessing element was creating Seg fault which was not easy
+		   * to debug 
+		   * 
+		   * break when next pointer == head
+		   * 
+		   * Credit : sattu
+		   * 
+		   */ 
 
+		if(offset_va >= my_vma->e->start && offset_va < my_vma->e->end){
+			unsigned long read_size;
+			read_size =  min_t(unsigned long,tmp->end - offset_va,my_vma->e->end - offset_va);
 			//mremap it
 			source_addr = (void*)(tmp->mapp_addr + (offset_va - tmp->start));
 			tgt_addr    = (void*)((unsigned long)my_vma->premmaped_addr + (offset_va - my_vma->e->start));
@@ -1282,27 +1290,25 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			// }
 			pr_debug("Succesfull mremap pages from start addr %p nr_pages %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE);
 			offset_va += read_size;
-
 			if(offset_va == tmp->end){
 				tmp = tmp->next;
-		  /*
-		   * DISASTROUS ERORR 
-		   * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
-		   */
+
+		  	/*
+		   	 * DISASTROUS ERORR 
+		   	 * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
+		   	 */
 				if(tmp == NULL)break;
 				offset_va = tmp->start;
 			}
 		}else{
 			my_vma = vma_next(my_vma);
-		  /*
-		   * DISASTROUS ERORR 
-		   * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
-		   */
-			if(my_vma == NULL)break;
+		   /*
+		    * DISASTROUS ERORR 
+		    * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
+		    */
+			if(((unsigned long)my_vma!= (unsigned long)vmas))break;
 		}
 	  }
-		pr_debug("Here\n");
-		pr_err("Here\n");
 	/*
 	 * Read page contents.
 	 */
@@ -1523,7 +1529,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 
 		}
 	}
-
+ 
 err_read:
 	pr_debug("Shubham log: In err_read after finishing while loop\n");
 	//print vma_io list
@@ -1811,7 +1817,6 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 				int case_occur =-1;
 				while(history_pme_tmp){
 					//Handling case of overlap
-
 					//case 1:
 					if((history_pme_tmp->is_valid == 1) && pme_tmp_list->start >= history_pme_tmp->start && pme_tmp_list->end <= history_pme_tmp->end){
 						/*
@@ -1847,6 +1852,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 												 
 						 //new_entry = 1;
 						 case_occur = 1;
+						 pr_debug("Case_occur  %d\n\n",case_occur);
 						 break;
 					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start >= history_pme_tmp->start && pme_tmp_list->start < history_pme_tmp->end && pme_tmp_list->end > history_pme_tmp->end){
 						/*
@@ -1914,6 +1920,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						history_pme_tmp->end = history_pme_tmp->start + third_size;
 						history_pme_tmp->nr_pages = (history_pme_tmp->end - history_pme_tmp->start)/4096;
 						case_occur = 1;
+						 pr_debug("Case_occur  %d\n\n",case_occur);
 
 		
 					}else if((history_pme_tmp->is_valid==1) && pme_tmp_list->start < history_pme_tmp->start && pme_tmp_list->end > history_pme_tmp->start && pme_tmp_list->end <= history_pme_tmp->end){
@@ -1981,7 +1988,12 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						history_pme_tmp->end = history_pme_tmp->start + third_size;
 						history_pme_tmp->nr_pages = (history_pme_tmp->end - history_pme_tmp->start)/4096;
 						case_occur = 1;
+						 pr_debug("Case_occur  %d\n\n",case_occur);
+
 					}
+
+					history_pme_tmp = history_pme_tmp->next;
+				}
 
 					if(case_occur == -1){
 						/*
@@ -2000,6 +2012,8 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						void *first_addr;
 
 						sec_size   = pme_tmp_list->end - pme_tmp_list->start;
+
+						pr_debug("Case Occur : %d\n\n",case_occur);
 						first_addr = mmap(NULL,sec_size,PROT_WRITE|PROT_READ,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
 						if(first_addr== MAP_FAILED){
 							pr_debug("MMap failde for CASE D\n");
@@ -2025,8 +2039,6 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						
 					}
 
-					history_pme_tmp = history_pme_tmp->next;
-				}
 				off_st += (pme_tmp_list->end - pme_tmp_list->start);
 
 				pme_tmp_list = pme_tmp_list->next;
