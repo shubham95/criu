@@ -1812,11 +1812,13 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 			}
 
 			pme_tmp_list 	= pme_list_head;
-			history_pme_tmp = history_pme_head;
+
 
 			while(pme_tmp_list){
 
 				int case_occur =-1;
+                //what an error you have to reintillize it for every node of pme_tmp_list
+			    history_pme_tmp = history_pme_head;
 				while(history_pme_tmp){
 					//Handling case of overlap
 					//case 1:
@@ -2306,13 +2308,17 @@ int prepare_mappings(struct pstree_item *t)
 	 * write all vma to file to later chk on diff
 	 * 
 	 */
-
-	file_to_fd = open("/home/connoisseur/project/vma_file",O_CREAT|O_RDONLY);
-	while(tot_write_byte){
-		wbyte = write(file_to_fd,(void *)buff,tot_write_byte);
+    wbyte =4096;
+	file_to_fd = open("/home/connoisseur/project/vma_file",O_CREAT|O_RDWR);
+	while(tot_write_byte>0){
+		wbyte = write(file_to_fd,(void *)buff,wbyte);
+        if(wbyte<0){
+            break;
+        }
 		buff+=wbyte;
 		tot_write_byte-=wbyte;
 	}
+    close(file_to_fd);
 
 
 
