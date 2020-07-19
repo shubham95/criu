@@ -1250,9 +1250,6 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	 * 
 	 */
 
-		pr_debug("Here\n");
-		pr_err("Here\n");
-
 	  tmp = history_pme_head;
 	  if(tmp != NULL){
 		  /*
@@ -1288,7 +1285,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			// if(remap_addr != tgt_addr){
 			// 	return -1;
 			// }
-			pr_debug("Succesfull mremap pages from start addr %p nr_pages %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE);
+			pr_debug("Succesfull mremap pages from start addr %p nr_pages %ld into vma %p\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start);
 			offset_va += read_size;
 			if(offset_va == tmp->end){
 				tmp = tmp->next;
@@ -1297,7 +1294,10 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		   	 * DISASTROUS ERORR 
 		   	 * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
 		   	 */
-				if(tmp == NULL)break;
+				if(tmp == NULL){
+					pr_err("break\n");
+					break;
+				}
 				offset_va = tmp->start;
 			}
 		}else{
@@ -1306,13 +1306,15 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		    * DISASTROUS ERORR 
 		    * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
 		    */
-			if(((unsigned long)my_vma!= (unsigned long)vmas))break;
+			if(((unsigned long)my_vma == (unsigned long)vmas)){
+				pr_err("break\n");
+				break;
+			}
 		}
 	  }
 	/*
 	 * Read page contents.
 	 */
-	pr_debug("Here\n");
 	while (0) {
 		unsigned long off, i, nr_pages;
 
@@ -2245,6 +2247,9 @@ int prepare_mappings(struct pstree_item *t)
 	void *addr;
 	struct vm_area_list *vmas;
 	struct page_read pr;
+	unsigned long buff;
+	unsigned long tot_write_byte,wbyte;
+	int file_to_fd;
 	// struct vma_area *vma;
 	// struct list_head *vmas_head;
 
@@ -2260,6 +2265,8 @@ int prepare_mappings(struct pstree_item *t)
 	/* Reserve a place for mapping private vma-s one by one */
 	// it gives random address
 	addr = mmap(NULL, vmas->rst_priv_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	buff = (unsigned long)addr;
+	tot_write_byte = vmas->rst_priv_size;
 	pr_debug("\n\n\n\n Large Contigous VMA addr %p\n\n\n\n",addr);
 	if (addr == MAP_FAILED) {
 		ret = -1;
@@ -2296,27 +2303,18 @@ int prepare_mappings(struct pstree_item *t)
 
 
 	/*
-	 * Printing page bitmap of vma
+	 * write all vma to file to later chk on diff
 	 * 
 	 */
 
-	// list_for_each_entry(vma, vmas_head, list) {
-
-    //     unsigned long size, i = 0;
-    //     size = vma_entry_len(vma->e) / PAGE_SIZE;
-
-    //     pr_debug("vma start : %p  vma end : %p\n",(void *)vma->e->start,(void *)vma->e->end);
-    //     while(1){
-    //         //Find all pages
-    //         i = find_next_bit(vma->page_bitmap, size, i);
-    //         if(i>=size)break;
+	file_to_fd = open("/home/connoisseur/project/vma_file",O_CREAT|O_RDONLY);
+	while(tot_write_byte){
+		wbyte = write(file_to_fd,(void *)buff,tot_write_byte);
+		buff+=wbyte;
+		tot_write_byte-=wbyte;
+	}
 
 
-    //         i++;
-    //     }
-    //         pr_debug(" %ld",i);
-    //     pr_debug("\n\n\n");
-	// }
 
 	if (ret < 0)
 		goto out;
