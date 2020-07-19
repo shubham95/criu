@@ -1016,7 +1016,7 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		else{
 
 			addr = mmap(*tgt_addr, size,
-					vma->e->prot | PROT_WRITE,
+					vma->e->prot | PROT_WRITE|PROT_READ,
 					vma->e->flags | MAP_FIXED | flag,
 					vma->e->fd, vma->e->pgoff);
 
@@ -2266,7 +2266,7 @@ int prepare_mappings(struct pstree_item *t)
 
 	/* Reserve a place for mapping private vma-s one by one */
 	// it gives random address
-	addr = mmap(NULL, vmas->rst_priv_size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+	addr = mmap(NULL, vmas->rst_priv_size, PROT_READ|PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	buff = (unsigned long)addr;
 	tot_write_byte = vmas->rst_priv_size;
 	pr_debug("\n\n\n\n Large Contigous VMA addr %p\n\n\n\n",addr);
