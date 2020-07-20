@@ -1197,6 +1197,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	struct history_pme *tmp;
 	void *source_addr,*tgt_addr; //,*remap_addr;
 
+	int loop_var = 1;
+
 	unsigned int nr_restored = 0;
 	unsigned int nr_shared = 0; 
 	unsigned int nr_dropped = 0;
@@ -1256,6 +1258,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		   * DISASTROUS ERORR 
 		   * earlier i was accessing tmp->start without checking NULL condition and getting seg fault
 		   */
+		  loop_var = 0;
 		  offset_va = tmp->start;
 
 	  }
@@ -1315,7 +1318,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	/*
 	 * Read page contents.
 	 */
-	while (0) {
+	(loop_var == 1)?pr_debug("Normal Restore\n"):pr_debug("Restore Parallel\n");
+	while (loop_var) {
 		unsigned long off, i, nr_pages;
 
 		ret = pr->advance(pr);
