@@ -1721,8 +1721,8 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 		}
 
 		while(merge_pme_list(pme_list_head)){
-			print_pme_list(pme_list_head);
-			pr_debug("\n\n\n");
+			// print_pme_list(pme_list_head);
+			// pr_debug("\n\n\n");
 		}
 
 		// redaing pages now to criu address space
@@ -1807,9 +1807,13 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 			}
 
 			while(merge_pme_list(pme_list_head)){
-				print_pme_list(pme_list_head);
-				pr_debug("\n\n\n");
+				// print_pme_list(pme_list_head);
+				// pr_debug("\n\n\n");
 			}
+			
+			print_pme_list(pme_list_head);
+			pr_debug("\n\n\n");
+
 
 			pme_tmp_list 	= pme_list_head;
 
@@ -2249,9 +2253,9 @@ int prepare_mappings(struct pstree_item *t)
 	void *addr;
 	struct vm_area_list *vmas;
 	struct page_read pr;
-	unsigned long buff;
-	unsigned long tot_write_byte,wbyte;
-	int file_to_fd;
+	//unsigned long buff;
+	//unsigned long tot_write_byte,wbyte;
+	//int file_to_fd;
 	// struct vma_area *vma;
 	// struct list_head *vmas_head;
 
@@ -2267,8 +2271,8 @@ int prepare_mappings(struct pstree_item *t)
 	/* Reserve a place for mapping private vma-s one by one */
 	// it gives random address
 	addr = mmap(NULL, vmas->rst_priv_size, PROT_READ|PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
-	buff = (unsigned long)addr;
-	tot_write_byte = vmas->rst_priv_size;
+	//buff = (unsigned long)addr;
+	//tot_write_byte = vmas->rst_priv_size;
 	pr_debug("\n\n\n\n Large Contigous VMA addr %p\n\n\n\n",addr);
 	if (addr == MAP_FAILED) {
 		ret = -1;
@@ -2308,17 +2312,17 @@ int prepare_mappings(struct pstree_item *t)
 	 * write all vma to file to later chk on diff
 	 * 
 	 */
-    wbyte =4096;
-	file_to_fd = open("/home/connoisseur/project/vma_file",O_CREAT|O_RDWR);
-	while(tot_write_byte>0){
-		wbyte = write(file_to_fd,(void *)buff,wbyte);
-        if(wbyte<0){
-            break;
-        }
-		buff+=wbyte;
-		tot_write_byte-=wbyte;
-	}
-    close(file_to_fd);
+    // wbyte =4096;
+	// file_to_fd = open("/home/connoisseur/project/vma_file",O_CREAT|O_RDWR);
+	// while(tot_write_byte>0){
+	// 	wbyte = write(file_to_fd,(void *)buff,wbyte);
+    //     if(wbyte<0){
+    //         break;
+    //     }
+	// 	buff+=wbyte;
+	// 	tot_write_byte-=wbyte;
+	// }
+    // close(file_to_fd);
 
 
 
