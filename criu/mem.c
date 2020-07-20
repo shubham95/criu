@@ -1711,7 +1711,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 			struct pme_list *node = (struct pme_list*)malloc(sizeof(struct pme_list));
 			node->start = pr.pmes[i]->vaddr;
 			node->end   = pr.pmes[i]->vaddr + (pr.pmes[i]->nr_pages * PAGE_SIZE);
-
+			node->next 	= NULL;
 			if(pme_list_head == NULL){
 				pme_list_head = node;
 				pme_list_tail = node;
@@ -1795,6 +1795,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 					struct pme_list *node = (struct pme_list*)malloc(sizeof(struct pme_list));
 					node->start = pr.pmes[i]->vaddr;
 					node->end   = pr.pmes[i]->vaddr + (pr.pmes[i]->nr_pages * PAGE_SIZE);
+					node->next	= NULL;
 
 					if(pme_list_head == NULL){
 						pme_list_head = node;
@@ -1811,8 +1812,8 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 			}
 
 			while(merge_pme_list(pme_list_head)){
-				// print_pme_list(pme_list_head);
-				// pr_debug("\n\n\n");
+				//  print_pme_list(pme_list_head);
+				//  pr_debug("\n\n\n");
 			}
 			
 			print_pme_list(pme_list_head);
