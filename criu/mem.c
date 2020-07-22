@@ -1195,7 +1195,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	struct list_head *vmas = &rsti(t)->vmas.h;
 	struct list_head *vma_io = &rsti(t)->vma_io;
 	struct history_pme *tmp;
-	void *source_addr,*tgt_addr; //,*remap_addr;
+	void *source_addr,*tgt_addr,*remap_addr,*remap_tmp;
 
 	int loop_var = 1;
 
@@ -1278,17 +1278,38 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 		   */ 
 
 		if(offset_va >= my_vma->e->start && offset_va < my_vma->e->end){
-			unsigned long read_size;
+			unsigned long read_size,vma_size;
 			read_size =  min_t(unsigned long,tmp->end - offset_va,my_vma->e->end - offset_va);
+			vma_size  =  my_vma->e->end - my_vma->e->start;
 			//mremap it
 			source_addr = (void*)(tmp->mapp_addr + (offset_va - tmp->start));
 			tgt_addr    = (void*)((unsigned long)my_vma->premmaped_addr + (offset_va - my_vma->e->start));
 			//remap_addr  =  mremap(source_addr,read_size,read_size,MREMAP_FIXED|MREMAP_MAYMOVE,tgt_addr);
-			memcpy(tgt_addr,source_addr,read_size);
-			// if(remap_addr != tgt_addr){
-			// 	return -1;
-			// }
-			pr_debug("Succesfull mremap pages from start addr %p nr_pages %ld into vma %p\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start);
+			if(read_size == vma_size && (offset_va==my_vma->e->start)){
+				remap_addr  =  mremap(source_addr,read_size,read_size,MREMAP_FIXED|MREMAP_MAYMOVE,tgt_addr);
+				if(remap_addr != tgt_addr){
+					return -1;
+				}
+				pr_debug(" CASE A Succesfull mremap pages from start addr %p nr_pages %ld into vma %p\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start);
+
+			}
+			else if((0) && read_size < vma_size && (offset_va==my_vma->e->start)){
+				remap_tmp = mremap(source_addr,read_size,vma_size,MREMAP_MAYMOVE);
+				pr_debug("tmp remap %p \n",remap_tmp);
+				if(remap_tmp == NULL){
+					return -1;
+				}
+				remap_addr  =  mremap(remap_tmp,read_size,read_size,MREMAP_FIXED|MREMAP_MAYMOVE,tgt_addr);
+				if(remap_addr != tgt_addr){
+					return -1;
+				}
+				pr_debug("CASE B Succesfull mremap pages from start addr %p nr_pages %ld into vma %p vma_size %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start,vma_size/PAGE_SIZE);
+
+			}else{
+				memcpy(tgt_addr,source_addr,read_size);
+				pr_debug("CASE C: Succesfull mremap pages from start addr %p nr_pages %ld into vma %p vma_size %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start,vma_size/PAGE_SIZE);		
+			}
+			
 			offset_va += read_size;
 			if(offset_va == tmp->end){
 				tmp = tmp->next;
