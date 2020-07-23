@@ -1699,6 +1699,7 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 	struct history_pme *history_pme_tmp;
 	struct pme_list *pme_tmp_list;
 	void *addr = NULL;
+	void *addr_tmp =  NULL;
 
 
 	//First argument is process pid to be restored with which is just the sake of combatiblitiy.
@@ -1750,6 +1751,9 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 			// pr_debug("\n\n\n");
 		}
 
+		print_pme_list(pme_list_head);
+
+
 		// redaing pages now to criu address space
 
 
@@ -1764,15 +1768,18 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 				pr_debug("Mmap Failed\n");
 				return -1;
 			}
-			ret = pread(page_fd, addr, size, off_st);
-			if(size!=ret){
-				pr_debug("Not able to read properly Actual size : %ld, Actual read :%ld\n",size,ret);
-				off_st+=size;
-				continue;
-						//skipping this read
+			addr_tmp = addr;
+			while(size>0){
+				ret = pread(page_fd, addr_tmp, size, off_st);
+				pr_debug("Robust Read properly Actual size : %ld, Actual read :%ld\n",size,ret);
+
+				off_st+=ret;
+				size-=ret;
+				addr_tmp = (void *)((unsigned long) addr_tmp + ret);
+
+
 			}
-			//Increasing offset for next pageread
-			off_st+=size;
+
 			pr_debug("start addresss %p | size read %ld\n",addr,ret);
 
 
@@ -1873,8 +1880,12 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 addr_off_st = pme_tmp_list->start - history_pme_tmp->start;
 						 read_start = history_pme_tmp->mapp_addr + addr_off_st ;
 
-						 pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",(void *)read_start,page_fd,size);
+						 pr_debug("Trying to read the content at %p: %d:	%ld\n\n\n",(void *)read_start,page_fd,size);
 
+						//  pr_debug("History Vma start %p  end %p  mapped_addr %p nr_pages %ld\n",(void *)history_pme_tmp->start,(void *)history_pme_tmp->end,(void *)history_pme_tmp->mapp_addr,history_pme_tmp->nr_pages);
+						//  pr_debug("Orginal Vma start %p  end %p  nr_pages %ld\n",(void *)pme_tmp_list->start,(void *)pme_tmp_list->end,(pme_tmp_list->end - pme_tmp_list->start)/PAGE_SIZE);
+						 
+						//  pr_debug("pread args page_fd %d, addr %p, size %ld, off %ld addr_off %ld\n",page_fd,(void *)read_start,size,off_st,addr_off_st);
 						 ret = pread(page_fd,(void *)read_start,size,off_st);
 						 
 						 if(ret != size){
