@@ -2307,6 +2307,7 @@ int prepare_mappings(struct pstree_item *t)
 
 	/* Reserve a place for mapping private vma-s one by one */
 	// it gives random address
+	timing_start(TIME_PREMAP);
 	addr = mmap(NULL, vmas->rst_priv_size, PROT_READ|PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 	//buff = (unsigned long)addr;
 	//tot_write_byte = vmas->rst_priv_size;
@@ -2334,16 +2335,19 @@ int prepare_mappings(struct pstree_item *t)
 
 	//agruments to function pstree, vmas list, addrress to mmap pointer , address of pr
 	
-	//this functions mmap the vmas with offset 
+	//this functions mmap the vmas with offset
+
 	ret = premap_priv_vmas(t, vmas, &addr, &pr);
+	timing_stop(TIME_PREMAP);
 	if (ret < 0)
 		goto out;
 
 	pr.reset(&pr);
 
 	//In case pieok == false it will fill the pages in this function
+	timing_start(TIME_COPY_CONTENT);
 	ret = restore_priv_vma_content(t, &pr);
-
+	timing_stop(TIME_COPY_CONTENT);
 
 	/*
 	 * write all vma to file to later chk on diff

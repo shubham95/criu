@@ -28,10 +28,12 @@ message restore_stats_entry {
 
 	required uint32			forking_time		= 3;
 	required uint32			restore_time		= 4;
+	required uint32			premap_time			= 5;
+	required uint32			copy_time			= 6;
 
-	optional uint64			pages_restored		= 5;
+	optional uint64			pages_restored		= 7;
 
-	required uint64			pages_skipped_pre_filled = 6;
+	required uint64			pages_skipped_pre_filled = 8;
 }
 
 message stats_entry {

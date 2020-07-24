@@ -1,0 +1,13 @@
+
+Stats Restore Informaton
+
+
+"pages_compared": 0, 
+"pages_skipped_cow": 0, 
+"forking_time": 0, 
+"restore_time": 13434, 
+"premap_time": 270,                     // Premaping the vma 
+"copy_time": 230,                       //Actual Filling of Pages into vma
+"pages_restored": 0, 
+"pages_skipped_pre_filled": 0
+

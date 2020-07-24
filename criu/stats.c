@@ -198,6 +198,8 @@ void write_stats(int what)
 
 		encode_time(TIME_FORK, &rs_entry.forking_time);
 		encode_time(TIME_RESTORE, &rs_entry.restore_time);
+		encode_time(TIME_PREMAP, &rs_entry.premap_time);
+		encode_time(TIME_COPY_CONTENT, &rs_entry.copy_time);
 
 		name = "restore";
 	} else
