@@ -34,6 +34,8 @@ message restore_stats_entry {
 	optional uint64			pages_restored		= 7;
 
 	required uint64			pages_skipped_pre_filled = 8;
+	required uint64			pages_remap = 9;
+	required uint64			pages_copy = 10;
 }
 
 message stats_entry {

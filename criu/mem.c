@@ -1205,6 +1205,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	unsigned int nr_compared = 0;
 	unsigned int nr_lazy = 0;
 	unsigned int nr_skip_is_filled = 0;
+	unsigned int nr_mremap = 0;
+	unsigned int nr_memcpy = 0;
 	unsigned long va;
 	unsigned long offset_va;
 
@@ -1290,6 +1292,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 				if(remap_addr != tgt_addr){
 					return -1;
 				}
+				nr_mremap += read_size/PAGE_SIZE;
 				pr_debug(" CASE A Succesfull mremap pages from start addr %p nr_pages %ld into vma %p\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start);
 
 			}
@@ -1308,6 +1311,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			}else{
 				memcpy(tgt_addr,source_addr,read_size);
 				pr_debug("CASE C: Succesfull mremap pages from start addr %p nr_pages %ld into vma %p vma_size %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start,vma_size/PAGE_SIZE);		
+				nr_memcpy += read_size/PAGE_SIZE;
 			}
 			
 			offset_va += read_size;
@@ -1600,6 +1604,8 @@ err_read:
 	cnt_add(CNT_PAGES_SKIPPED_COW, nr_shared);
 	cnt_add(CNT_PAGES_RESTORED, nr_restored);
 	cnt_add(CNT_PAGES_PRE_FILLED, nr_skip_is_filled);
+	cnt_add(CNT_PAGES_REMAP,nr_mremap);
+	cnt_add(CNT_PAGES_COPY,nr_memcpy);
 
 	pr_info("nr_restored_pages: %d\n", nr_restored);
 	pr_info("nr_shared_pages:   %d\n", nr_shared);

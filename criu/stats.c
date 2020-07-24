@@ -195,13 +195,20 @@ void write_stats(int what)
 		rs_entry.has_pages_restored = true;
 		rs_entry.pages_restored = atomic_read(&rstats->counts[CNT_PAGES_RESTORED]);
 		rs_entry.pages_skipped_pre_filled = atomic_read(&rstats->counts[CNT_PAGES_PRE_FILLED]);
+		rs_entry.pages_remap = atomic_read(&rstats->counts[CNT_PAGES_REMAP]);
+		rs_entry.pages_copy = atomic_read(&rstats->counts[CNT_PAGES_COPY]);
+
 
 		encode_time(TIME_FORK, &rs_entry.forking_time);
 		encode_time(TIME_RESTORE, &rs_entry.restore_time);
 		encode_time(TIME_PREMAP, &rs_entry.premap_time);
 		encode_time(TIME_COPY_CONTENT, &rs_entry.copy_time);
 
-		name = "restore";
+		if((rs_entry.pages_remap !=0) ||(rs_entry.pages_copy != 0)){
+			name = "restore-parallel";
+		}else{
+			name = "restore";
+		}
 	} else
 		return;
 
