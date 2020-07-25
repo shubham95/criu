@@ -1783,7 +1783,6 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 				size-=ret;
 				addr_tmp = (void *)((unsigned long) addr_tmp + ret);
 
-
 			}
 
 			pr_debug("start addresss %p | size read %ld\n",addr,ret);

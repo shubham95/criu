@@ -2477,6 +2477,8 @@ int cr_restore_parallel(void)
 	int out_flag =0;
 	int i = 0;
 	int total_read;
+	int odd =1;
+	int path_index =0;
 	unsigned long process_id=0;
 
 	char buffer[BUFFER_LEN];
@@ -2510,14 +2512,43 @@ int cr_restore_parallel(void)
 
 					}else{
 						//File is created
-						printf("File name: %s\n",event->name);
+						printf("File name: %s\n",event->name);	
 						if(strcmp(event->name,"complete")==0){
 							out_flag =1;
 							break;
 						}
-						for(int j=0;j<event->len;j++){
-							if(path[])
+						if(odd&1){
+							path_index=3;
+							path[0]='.';
+							path[1]='.';
+							path[2]='/';
+							for(int j=0;j<event->len;j++){
+								if(event->name[j] =='_'){
+									path[path_index]='\0';
+									break;
+								}else{
+									path[path_index] = event->name[j];
+								}
+								path_index++;
+							}
+						}else{
+							for(int j=0;j<event->len;j++){
+								if(event->name[j] =='_'){
+									break;
+								}else{
+									process_id = process_id*10+(event->name[j]-'0');
+
+								}
+							}
+							dump_no++;
+							printf("Directory path %s\n",path);
+							printf("Process_id %ld\n",process_id);
+							dir_fd = open(path,O_RDONLY);
+							prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
+							process_id=0;
+
 						}
+						odd++;
 					}
 				}
 			}
@@ -2533,24 +2564,24 @@ int cr_restore_parallel(void)
 	//Run deamon which kept waiting for new directory in current directory
 
 
-	while(1){
-		printf("Enter directory path of pre-dump nr %d:\n",dump_no++);
-		scanf("%s",path);
-		printf("%s\n",path);
-		printf("Enter pid: this used in file reading\n");
-		scanf("%ld",&process_id);
-		printf("%ld\n",process_id);
+	// while(1){
+	// 	printf("Enter directory path of pre-dump nr %d:\n",dump_no++);
+	// 	scanf("%s",path);
+	// 	printf("%s\n",path);
+	// 	printf("Enter pid: this used in file reading\n");
+	// 	scanf("%ld",&process_id);
+	// 	printf("%ld\n",process_id);
 		
-		if(process_id ==0){
-			break;
-		}
+	// 	if(process_id ==0){
+	// 		break;
+	// 	}
 		
-		//getting dir fd
-		dir_fd = open(path,O_RDONLY);
+	// 	//getting dir fd
+	// 	dir_fd = open(path,O_RDONLY);
 
 		
-		prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
-	}
+	// 	prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
+	// }
 
 	return cr_restore_tasks();
 }
