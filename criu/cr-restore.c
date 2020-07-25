@@ -16,6 +16,7 @@
 #include <sys/shm.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
+#include <sys/inotify.h>
 #include <sched.h>
 
 
@@ -97,6 +98,13 @@
 #include "cr-errno.h"
 
 #include "pie/pie-relocs.h"
+
+
+#define MAX_EVENT_MONITOR 2048
+#define NAME_LEN 32
+#define MONITOR_EVENT_SIZE (sizeof(struct inotify_event))//size of event
+#define BUFFER_LEN MAX_EVENT_MONITOR*(MONITOR_EVENT_SIZE+NAME_LEN)//buffer length
+
 
 #ifndef arch_export_restore_thread
 #define arch_export_restore_thread	__export_restore_thread
@@ -2465,10 +2473,65 @@ int cr_restore_parallel(void)
 	//int ret = -1;
 	int dir_fd  = -1;
 	int dump_no =  1;
+	int fd,watch_desc;
+	int out_flag =0;
+	int i = 0;
+	int total_read;
 	unsigned long process_id=0;
-	//int pmi_fd = -1;
-	//Run deamon which kept waiting for new directory in current directory
+
+	char buffer[BUFFER_LEN];
 	char path[50];
+
+	fd = inotify_init();
+	if(fd<0){
+		printf("Notify Intializer Error\n");
+		return -1;
+	}
+	watch_desc = inotify_add_watch(fd,"/home/connoisseur/project/jmp",IN_CREATE);
+
+	if(watch_desc == -1){
+		printf("Couldn't add waatch\n");
+	}else{
+		printf("Monitoring\n");
+	}
+
+	while(1){
+		i=0;
+		total_read = read(fd,buffer,BUFFER_LEN);
+		if(total_read<0){
+			printf("read error\n");
+		}
+
+		while( i < total_read){
+			struct inotify_event *event = (struct inotify_event*)&buffer[i];
+			if(event->len){
+				if(event->mask & IN_CREATE){
+					if(event->mask & IN_ISDIR){
+
+					}else{
+						//File is created
+						printf("File name: %s\n",event->name);
+						if(strcmp(event->name,"complete")==0){
+							out_flag =1;
+							break;
+						}
+						for(int j=0;j<event->len;j++){
+							if(path[])
+						}
+					}
+				}
+			}
+			i+=MONITOR_EVENT_SIZE+event->len;
+		}
+
+		if(out_flag == 1){
+			break;
+		}
+
+	}
+	
+	//Run deamon which kept waiting for new directory in current directory
+
 
 	while(1){
 		printf("Enter directory path of pre-dump nr %d:\n",dump_no++);
