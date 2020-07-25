@@ -2583,6 +2583,7 @@ int cr_restore_parallel(void)
 	// 	prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
 	// }
 
+	printf("Running Original Restore\n");
 	return cr_restore_tasks();
 }
 

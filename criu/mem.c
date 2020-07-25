@@ -1309,6 +1309,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 				pr_debug("CASE B Succesfull mremap pages from start addr %p nr_pages %ld into vma %p vma_size %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start,vma_size/PAGE_SIZE);
 
 			}else{
+				pr_debug("offset %p list start %p end %p mmaped %p\n",(void *)offset_va,(void *)tmp->start,(void *)tmp->end,(void *)tmp->mapp_addr);
+				pr_debug("source %p tgt %p, read_size %ld pages %ld\n",source_addr,tgt_addr,read_size,read_size/PAGE_SIZE);
 				memcpy(tgt_addr,source_addr,read_size);
 				pr_debug("CASE C: Succesfull mremap pages from start addr %p nr_pages %ld into vma %p vma_size %ld\n\n",(void *)offset_va,read_size/PAGE_SIZE,(void*)my_vma->e->start,vma_size/PAGE_SIZE);		
 				nr_memcpy += read_size/PAGE_SIZE;
@@ -1923,50 +1925,64 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 *  s8 	free both A and C
 						 */ 
 
-						void *first_addr, *sec_addr, *remap_addr, *offset_addr;
+						void *first_addr, *remap_addr;//, *offset_addr;
 						uint64_t first_size, sec_size, third_size, addr_offst,ret;
 
 						first_size = history_pme_tmp->end - history_pme_tmp->start;  //List 1
 						sec_size   = pme_tmp_list->end - pme_tmp_list->start;		 //List 2
 						third_size = pme_tmp_list->end - history_pme_tmp->start;	 //List mod
 
-						first_addr = mmap(NULL,sec_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
-						if(first_addr== MAP_FAILED){
-							pr_debug("MMap failde for CASE D\n");
-							return -1;
-						}	
-						
-
-						pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
+						remap_addr = mremap((void *)history_pme_tmp->mapp_addr,first_size,third_size,MREMAP_MAYMOVE);
+						if((unsigned long)remap_addr !=-1){
+							pr_debug("CASE BRemap Succesfull\n");
+						}
+						addr_offst = pme_tmp_list->start - history_pme_tmp->start;
+						first_addr = (void *)((unsigned long)remap_addr + addr_offst);
 						ret = pread(page_fd,first_addr,sec_size,off_st);
 						if(ret != sec_size){
 							pr_debug("Case B Unable to do pread successful ret %ld  size %ld\n",ret,sec_size);
 							return -1;
-						}
-						
-						sec_addr   = mmap(NULL,third_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
-						if(sec_addr== MAP_FAILED){
-							pr_debug("MMap failde for CASE D\n");
-							return -1;
 						}						
+						pr_debug("CASE B Succefully override the new map %p\n",remap_addr);
 
-						remap_addr = mremap((void *)history_pme_tmp->mapp_addr,first_size,first_size,MREMAP_FIXED|MREMAP_MAYMOVE,sec_addr);
-						if(remap_addr != sec_addr){
-							pr_debug("Case B Unable to do 1st mremap successful\n");
-						}
+
+						// first_addr = mmap(NULL,sec_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+						// if(first_addr== MAP_FAILED){
+						// 	pr_debug("MMap failde for CASE D\n");
+						// 	return -1;
+						// }	
 						
-						addr_offst = pme_tmp_list->start - history_pme_tmp->start;
-						offset_addr = (void *)(addr_offst+(unsigned long)sec_addr);
 
-						remap_addr = mremap((void *)first_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
-						if(remap_addr != offset_addr){
-							pr_debug("Case B Unable to do 2nd mremap successful\n");
-
-						}
+						// pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
+						// ret = pread(page_fd,first_addr,sec_size,off_st);
+						// if(ret != sec_size){
+						// 	pr_debug("Case B Unable to do pread successful ret %ld  size %ld\n",ret,sec_size);
+						// 	return -1;
+						// }
 						
-						munmap((void *)history_pme_tmp->mapp_addr,first_size);
-						munmap(first_addr,sec_size);
-						history_pme_tmp->mapp_addr = (unsigned long)sec_addr;
+						// sec_addr   = mmap(NULL,third_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+						// if(sec_addr== MAP_FAILED){
+						// 	pr_debug("MMap failde for CASE D\n");
+						// 	return -1;
+						// }						
+
+						// remap_addr = mremap((void *)history_pme_tmp->mapp_addr,first_size,first_size,MREMAP_FIXED|MREMAP_MAYMOVE,sec_addr);
+						// if(remap_addr != sec_addr){
+						// 	pr_debug("Case B Unable to do 1st mremap successful\n");
+						// }
+						
+						// addr_offst = pme_tmp_list->start - history_pme_tmp->start;
+						// offset_addr = (void *)(addr_offst+(unsigned long)sec_addr);
+
+						// remap_addr = mremap((void *)first_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
+						// if(remap_addr != offset_addr){
+						// 	pr_debug("Case B Unable to do 2nd mremap successful\n");
+
+						// }
+						
+						//munmap((void *)history_pme_tmp->mapp_addr,first_size);
+						//munmap(first_addr,sec_size);
+						history_pme_tmp->mapp_addr = (unsigned long)remap_addr;
 						history_pme_tmp->end = history_pme_tmp->start + third_size;
 						history_pme_tmp->nr_pages = (history_pme_tmp->end - history_pme_tmp->start)/4096;
 						case_occur = 1;
@@ -1992,49 +2008,70 @@ int prepare_mappings_parallel(int dir_fd, unsigned long process_id, int dump_no)
 						 *  s8 	free both A and C
 						 */
 
-						void *first_addr, *sec_addr, *remap_addr, *offset_addr;
+						void *first_addr, *offset_addr;
 						uint64_t first_size, sec_size, third_size, addr_offst,ret;
 
 						first_size = history_pme_tmp->end - history_pme_tmp->start;  //List 1
 						sec_size   = pme_tmp_list->end - pme_tmp_list->start;		 //List 2
 						third_size = history_pme_tmp->end - pme_tmp_list->start;	 //List mod
 
-						first_addr = mmap(NULL,sec_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+
+						first_addr = mmap(NULL,third_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
 						if(first_addr== MAP_FAILED){
-							pr_debug("MMap failde for CASE D\n");
+							pr_debug("MMap failde for CASE C\n");
 							return -1;
 						}
-						
-						pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
+
 						ret = pread(page_fd,first_addr,sec_size,off_st);
 						if(ret != sec_size){
 							pr_debug("Case C Unable to do pread successful\n");
 							return -1;
 						}
-						
-						sec_addr   = mmap(NULL,third_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
-						if(sec_addr== MAP_FAILED){
-							pr_debug("MMap failde for CASE D\n");
-							return -1;
-						}
 
-						remap_addr = mremap(first_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,sec_addr);
-						if(remap_addr != sec_addr){
-							pr_debug("Case C Unable to do 1st mremap successful\n");
-						}
-						
 						addr_offst = history_pme_tmp->start - pme_tmp_list->start;
-						offset_addr = (void *)(addr_offst+(unsigned long)sec_addr);
+						offset_addr = (void *)(addr_offst+(unsigned long)first_addr);
 
-						remap_addr = mremap((void *)history_pme_tmp->mapp_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
-						if(remap_addr != offset_addr){
-							pr_debug("Case C Unable to do 2nd mremap successful\n");
+						memcpy(offset_addr,(void *)history_pme_tmp->mapp_addr,first_size);
 
-						}
+						pr_debug("CASE C Succefully override the new map %p\n",first_addr);
+
+						// first_addr = mmap(NULL,sec_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+						// if(first_addr== MAP_FAILED){
+						// 	pr_debug("MMap failde for CASE D\n");
+						// 	return -1;
+						// }
+						
+						// pr_debug("\n\n\nTrying to read the content at %p: %d:	%ld\n\n\n",first_addr,page_fd,sec_size);
+						// ret = pread(page_fd,first_addr,sec_size,off_st);
+						// if(ret != sec_size){
+						// 	pr_debug("Case C Unable to do pread successful\n");
+						// 	return -1;
+						// }
+						
+						// sec_addr   = mmap(NULL,third_size,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,0,0);
+						// if(sec_addr== MAP_FAILED){
+						// 	pr_debug("MMap failde for CASE D\n");
+						// 	return -1;
+						// }
+
+						// remap_addr = mremap(first_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,sec_addr);
+						// if(remap_addr != sec_addr){
+						// 	pr_debug("Case C Unable to do 1st mremap successful\n");
+						// }
+						
+						// addr_offst = history_pme_tmp->start - pme_tmp_list->start;
+						// offset_addr = (void *)(addr_offst+(unsigned long)sec_addr);
+
+						// remap_addr = mremap((void *)history_pme_tmp->mapp_addr,sec_size,sec_size,MREMAP_FIXED|MREMAP_MAYMOVE,offset_addr);
+						// if(remap_addr != offset_addr){
+						// 	pr_debug("Case C Unable to do 2nd mremap successful\n");
+
+						// }
 						
 						munmap((void *)history_pme_tmp->mapp_addr,first_size);
-						munmap(first_addr,sec_size);
-						history_pme_tmp->mapp_addr = (unsigned long)sec_addr;
+						// munmap(first_addr,sec_size);
+						history_pme_tmp->mapp_addr = (unsigned long)first_addr;
+						history_pme_tmp->start = pme_tmp_list->start;
 						history_pme_tmp->end = history_pme_tmp->start + third_size;
 						history_pme_tmp->nr_pages = (history_pme_tmp->end - history_pme_tmp->start)/4096;
 						case_occur = 1;
