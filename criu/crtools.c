@@ -151,7 +151,8 @@ int main(int argc, char *argv[], char *envp[])
 	}
 
 	/* We must not open imgs dir, if service is called */
-	if (strcmp(argv[optind], "service")) {
+	if (strcmp(argv[optind], "service") && strcmp(argv[optind],"restore-parallel")) {
+		printf("dir path %s  id %s\n",opts.imgs_dir,argv[optind]);
 		ret = open_image_dir(opts.imgs_dir);
 		if (ret < 0)
 			return 1;
@@ -180,8 +181,11 @@ int main(int argc, char *argv[], char *envp[])
 		pr_warn("Stopped and detached shell job will get SIGHUP from OS.\n");
 
 	if (chdir(opts.work_dir)) {
+		// printf("%s");
+		opts.work_dir = ".";
+		chdir(opts.work_dir);
 		pr_perror("Can't change directory to %s", opts.work_dir);
-		return 1;
+		//return 1;
 	}
 
 	if (log_init(opts.output))

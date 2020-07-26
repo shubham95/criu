@@ -32,19 +32,24 @@ int check_img_inventory(void)
 	struct cr_img *img;
 	InventoryEntry *he;
 
-	img = open_image(CR_FD_INVENTORY, O_RSTR);
-	if (!img)
-		return -1;
+	printf("Entry\n");
 
+	img = open_image(CR_FD_INVENTORY, O_RSTR);
+	if (!img){
+		printf("check_img_inventory img\n");
+		return -1;
+	}
+	printf("Entry2\n");
 	if (pb_read_one(img, &he, PB_INVENTORY) < 0)
 		goto out_close;
-
+	printf("Entry3\n");
 	if (!he->has_fdinfo_per_id || !he->fdinfo_per_id) {
 		pr_err("Too old image, no longer supported\n");
 		goto out_close;
 	}
-
+	perror("ASD");
 	ns_per_id = he->has_ns_per_id ? he->ns_per_id : false;
+	perror("ASD");
 
 	if (he->root_ids) {
 		root_ids = xmalloc(sizeof(*root_ids));
@@ -53,6 +58,7 @@ int check_img_inventory(void)
 
 		memcpy(root_ids, he->root_ids, sizeof(*root_ids));
 	}
+	perror("ASD");
 
 	if (he->has_root_cg_set) {
 		if (he->root_cg_set == 0) {

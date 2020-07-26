@@ -2476,10 +2476,12 @@ int cr_restore_parallel(void)
 	int fd,watch_desc;
 	int out_flag =0;
 	int i = 0;
+	int ret;
 	int total_read;
 	int odd =1;
 	int path_index =0;
 	unsigned long process_id=0;
+	char *path2 = "4";
 
 	char buffer[BUFFER_LEN];
 	char path[50];
@@ -2518,10 +2520,7 @@ int cr_restore_parallel(void)
 							break;
 						}
 						if(odd&1){
-							path_index=3;
-							path[0]='.';
-							path[1]='.';
-							path[2]='/';
+							path_index=0;
 							for(int j=0;j<event->len;j++){
 								if(event->name[j] =='_'){
 									path[path_index]='\0';
@@ -2560,6 +2559,8 @@ int cr_restore_parallel(void)
 		}
 
 	}
+	inotify_rm_watch(fd,watch_desc);
+	close(fd);
 	
 	//Run deamon which kept waiting for new directory in current directory
 
@@ -2584,68 +2585,100 @@ int cr_restore_parallel(void)
 	// }
 
 	printf("Running Original Restore\n");
+
+	ret = open_image_dir(path2);
+	if (ret < 0)
+		return 1;
 	return cr_restore_tasks();
 }
 
 int cr_restore_tasks(void)
 {
 	int ret = -1;
-
+	printf("Hello\n");
 	if (init_service_fd())
 		return 1;
 
 	if (cr_plugin_init(CR_PLUGIN_STAGE__RESTORE))
 		return -1;
 
-	if (check_img_inventory() < 0)
+	if (check_img_inventory() < 0){
+		printf("check_img_inventory\n");
 		goto err;
+	}
 
-	if (init_stats(RESTORE_STATS))
+	if (init_stats(RESTORE_STATS)){
+		printf("init_stats\n");
 		goto err;
+	}
 
-	if (lsm_check_opts())
+	if (lsm_check_opts()){
+		printf("lsm_check_opts\n");
 		goto err;
+	}
 
 	timing_start(TIME_RESTORE);
 
-	if (cpu_init() < 0)
+	if (cpu_init() < 0){
+		printf("cpu_init\n");
 		goto err;
+	}
 
-	if (vdso_init_restore())
+	if (vdso_init_restore()){
+		printf("vdso_init_restore\n");
 		goto err;
+	}
 
-	if (tty_init_restore())
+	if (tty_init_restore()){
+		printf("tty_init_restore\n");
 		goto err;
+	}
 
 	if (opts.cpu_cap & CPU_CAP_IMAGE) {
 		if (cpu_validate_cpuinfo())
 			goto err;
 	}
 
-	if (prepare_task_entries() < 0)
+	if (prepare_task_entries() < 0){
+		printf("prepare_task_entries\n");
 		goto err;
+	}
 
-	if (prepare_pstree() < 0)
+	if (prepare_pstree() < 0){
+		printf("prepare_pstree\n");
 		goto err;
+	}
 
-	if (fdstore_init())
+	if (fdstore_init()){
+		printf("fdstore_init\n");
 		goto err;
+	}
 
-	if (inherit_fd_move_to_fdstore())
+	if (inherit_fd_move_to_fdstore()){
+		printf("inherit_fd_move_to_fdstore\n");
 		goto err;
+	}
 
-	if (crtools_prepare_shared() < 0)
+	if (crtools_prepare_shared() < 0){
+		printf("crtools_prepare_shared\n");
 		goto err;
+	}
 
-	if (criu_signals_setup() < 0)
+	if (criu_signals_setup() < 0){
+		printf("criu_signals_setup\n");
 		goto err;
+	}
 
-	if (prepare_lazy_pages_socket() < 0)
+	if (prepare_lazy_pages_socket() < 0){
+		printf("prepare_lazy_pages_socket\n");
 		goto err;
+	}	
+	printf("Hello\n");
 
 	ret = restore_root_task(root_item);
 err:
 	cr_plugin_fini(CR_PLUGIN_STAGE__RESTORE, ret);
+	printf("Error\n");
 	return ret;
 }
 
