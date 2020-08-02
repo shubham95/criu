@@ -1017,7 +1017,7 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 
 			addr = mmap(*tgt_addr, size,
 					vma->e->prot | PROT_WRITE|PROT_READ,
-					vma->e->flags | MAP_FIXED | flag,
+					vma->e->flags | MAP_FIXED | MAP_POPULATE | flag,
 					vma->e->fd, vma->e->pgoff);
 
 			pr_debug("MMap is working with MAP_FIXED\n\n");
@@ -1195,7 +1195,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 	struct list_head *vmas = &rsti(t)->vmas.h;
 	struct list_head *vma_io = &rsti(t)->vma_io;
 	struct history_pme *tmp;
-	void *source_addr,*tgt_addr;//*remap_addr,*remap_tmp;
+	void *source_addr,*tgt_addr;//,*remap_addr,*remap_tmp;
 
 	int loop_var = 1;
 
@@ -1281,7 +1281,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 
 		if(offset_va >= my_vma->e->start && offset_va < my_vma->e->end){
 			unsigned long read_size,read_pages;
-			
+			//void *source_addr,*tgt_addr;
 			int fd_memmove=-1;
 			char buff_args[50];
 
@@ -1289,7 +1289,7 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			read_size  =  min_t(unsigned long,tmp->end - offset_va,my_vma->e->end - offset_va);
 			read_pages = read_size/PAGE_SIZE;
 			//vma_size  =  my_vma->e->end - my_vma->e->start;
-			//mremap it
+			// //mremap it
 			source_addr = (void*)(tmp->mapp_addr + (offset_va - tmp->start));
 			tgt_addr    = (void*)((unsigned long)my_vma->premmaped_addr + (offset_va - my_vma->e->start));
 			////remap_addr  =  mremap(source_addr,read_size,read_size,MREMAP_FIXED|MREMAP_MAYMOVE,tgt_addr);
@@ -1345,6 +1345,8 @@ static int restore_priv_vma_content(struct pstree_item *t, struct page_read *pr)
 			if(read(fd_memmove, buff_args,24) < 0){
 				pr_perror("Read error\n");
 			}
+
+			close(fd_memmove);
 
 			offset_va += read_size;
 			if(offset_va == tmp->end){
