@@ -2473,6 +2473,8 @@ int cr_restore_parallel(void)
 	//int ret = -1;
 	int dir_fd  = -1;
 	int dump_no =  1;
+	//int nr_dump =0;
+	int fd_pre =-1;
 	int fd,watch_desc;
 	int out_flag =0;
 	int i = 0;
@@ -2480,18 +2482,44 @@ int cr_restore_parallel(void)
 	int total_read;
 	int odd =1;
 	int path_index =0;
+	char buf_pre[20];
 	unsigned long process_id=0;
-	char *path2 = "4";
+	//char *path2 = "4";
+	
 
 	char buffer[BUFFER_LEN];
 	char path[50];
 
+	fd_pre = open("nr_predump",O_RDONLY);
+	read(fd_pre,buf_pre,10);
+	// for(int j=0;buf_pre[j]!='\0';j++){
+	// 	process_id = process_id*10+(event->name[j]-'0');
+	// }
+	printf("Yo Yo %s\n",buf_pre);
+
+	for(int i=0;buf_pre[i]!='\0';i++){
+		if(!(buf_pre[i]-'0'>=0 &&buf_pre[i]-'0'<=9)){
+			buf_pre[i]='\0';
+			break;
+		}
+	}
+
+	for(int i=0;buf_pre[i]!='\0';i++){
+		printf("%d:%c	",i,buf_pre[i]);
+	}
+	
+
+	close(fd_pre);
+	// fp = fopen("nr_predump","r");
+	// fscanf(fp, "%d", &nr_dump);
+	// fclose(fp);
+	
 	fd = inotify_init();
 	if(fd<0){
 		printf("Notify Intializer Error\n");
 		return -1;
 	}
-	watch_desc = inotify_add_watch(fd,"/home/connoisseur/project/jmp",IN_CREATE);
+	watch_desc = inotify_add_watch(fd,"./",IN_CREATE);
 
 	if(watch_desc == -1){
 		printf("Couldn't add waatch\n");
@@ -2542,6 +2570,9 @@ int cr_restore_parallel(void)
 							dump_no++;
 							printf("Directory path %s\n",path);
 							printf("Process_id %ld\n",process_id);
+							if(strcmp(path,buf_pre)==0){
+								printf("YAY  %s\n",buf_pre);
+							}							
 							dir_fd = open(path,O_RDONLY);
 							prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
 							process_id=0;
@@ -2586,7 +2617,7 @@ int cr_restore_parallel(void)
 
 	printf("Running Original Restore\n");
 
-	ret = open_image_dir(path2);
+	ret = open_image_dir(path);
 	if (ret < 0)
 		return 1;
 	return cr_restore_tasks();
