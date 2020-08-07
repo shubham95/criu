@@ -203,6 +203,8 @@ void write_stats(int what)
 		encode_time(TIME_RESTORE, &rs_entry.restore_time);
 		encode_time(TIME_PREMAP, &rs_entry.premap_time);
 		encode_time(TIME_COPY_CONTENT, &rs_entry.copy_time);
+		encode_time(TIME_TOTAL, &rs_entry.total_time);
+
 
 		if((rs_entry.pages_remap !=0) ||(rs_entry.pages_copy != 0)){
 			name = "restore-parallel";

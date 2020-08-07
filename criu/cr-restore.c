@@ -119,6 +119,9 @@
 #define arch_export_unmap_compat	__export_unmap_compat
 #endif
 
+struct timeval total_restore_start,total_restore_end;
+int restore_parallel =0;
+
 struct pstree_item *current;
 
 static int restore_task_with_children(void *);
@@ -2495,7 +2498,7 @@ int cr_restore_parallel(void)
 	// for(int j=0;buf_pre[j]!='\0';j++){
 	// 	process_id = process_id*10+(event->name[j]-'0');
 	// }
-	printf("Yo Yo %s\n",buf_pre);
+	//printf("Yo Yo %s\n",buf_pre);
 
 	for(int i=0;buf_pre[i]!='\0';i++){
 		if(!(buf_pre[i]-'0'>=0 &&buf_pre[i]-'0'<=9)){
@@ -2504,10 +2507,7 @@ int cr_restore_parallel(void)
 		}
 	}
 
-	for(int i=0;buf_pre[i]!='\0';i++){
-		printf("%d:%c	",i,buf_pre[i]);
-	}
-	
+	restore_parallel =1;
 
 	close(fd_pre);
 	// fp = fopen("nr_predump","r");
@@ -2571,8 +2571,11 @@ int cr_restore_parallel(void)
 							printf("Directory path %s\n",path);
 							printf("Process_id %ld\n",process_id);
 							if(strcmp(path,buf_pre)==0){
-								printf("YAY  %s\n",buf_pre);
-							}							
+								if (init_stats(RESTORE_STATS)){
+									printf("init_stats\n");
+								}
+								timing_start(TIME_RESTORE);
+							}						
 							dir_fd = open(path,O_RDONLY);
 							prepare_mappings_parallel(dir_fd,process_id,dump_no-1);
 							process_id=0;
@@ -2626,6 +2629,15 @@ int cr_restore_parallel(void)
 int cr_restore_tasks(void)
 {
 	int ret = -1;
+	gettimeofday(&total_restore_start,NULL);
+	if(restore_parallel == 0){
+		if (init_stats(RESTORE_STATS)){
+			printf("init_stats\n");
+			goto err;
+		}
+		timing_start(TIME_RESTORE);
+	}
+
 	printf("Hello\n");
 	if (init_service_fd())
 		return 1;
@@ -2638,17 +2650,12 @@ int cr_restore_tasks(void)
 		goto err;
 	}
 
-	if (init_stats(RESTORE_STATS)){
-		printf("init_stats\n");
-		goto err;
-	}
 
 	if (lsm_check_opts()){
 		printf("lsm_check_opts\n");
 		goto err;
 	}
 
-	timing_start(TIME_RESTORE);
 
 	if (cpu_init() < 0){
 		printf("cpu_init\n");
@@ -2710,6 +2717,9 @@ int cr_restore_tasks(void)
 err:
 	cr_plugin_fini(CR_PLUGIN_STAGE__RESTORE, ret);
 	printf("Error\n");
+	timing_stop(TIME_TOTAL);
+	gettimeofday(&total_restore_end,NULL);
+	printf("Total time in microsec:%ld\n",total_restore_end.tv_sec - total_restore_start.tv_sec);
 	return ret;
 }
 

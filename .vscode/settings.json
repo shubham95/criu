@@ -1,5 +1,10 @@
 {
     "files.associations": {
-        "version.h": "c"
+        "version.h": "c",
+        "*.tcc": "c",
+        "bitset": "c",
+        "cstdlib": "c",
+        "shared_mutex": "c",
+        "regex": "c"
     }
 }

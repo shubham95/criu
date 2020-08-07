@@ -1015,9 +1015,17 @@ static int premap_private_vma(struct pstree_item *t, struct vma_area *vma, void 
 		}
 		else{
 
+			if(tmp != NULL){
+					/*
+					* DISASTROUS ERORR 
+					* earlier i was accessing tmp->start without checking NULL condition and getting seg fault
+					*/
+					flag = flag | MAP_POPULATE;
+
+			}			
 			addr = mmap(*tgt_addr, size,
 					vma->e->prot | PROT_WRITE|PROT_READ,
-					vma->e->flags | MAP_FIXED | MAP_POPULATE | flag,
+					vma->e->flags | MAP_FIXED | flag,
 					vma->e->fd, vma->e->pgoff);
 
 			pr_debug("MMap is working with MAP_FIXED\n\n");
